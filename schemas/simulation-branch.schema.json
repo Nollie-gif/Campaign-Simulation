@@ -5,6 +5,8 @@
   "required": [
     "mode",
     "anchor",
+    "source_type",
+    "source_policy",
     "relative_position",
     "time_direction",
     "main_campaign_access",
@@ -13,6 +15,8 @@
   "properties": {
     "mode": {"enum": ["prequel", "sequel"]},
     "anchor": {"type": "string", "minLength": 1},
+    "source_type": {"const": "main_campaign"},
+    "source_policy": {"const": "main_campaign_only"},
     "relative_position": {"enum": ["before_main_campaign", "after_main_campaign"]},
     "time_direction": {"const": "forward"},
     "main_campaign_access": {"const": "read_only"},
