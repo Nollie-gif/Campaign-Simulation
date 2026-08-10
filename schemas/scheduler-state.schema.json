@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "phase": {
+      "enum": ["unknown", "dawn", "morning", "midday", "afternoon", "evening", "night", "late_night"]
+    },
+    "condition": {
+      "type": "object",
+      "required": ["path", "operator"],
+      "properties": {
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "operator": {
+          "enum": ["equals", "not_equals", "exists", "not_exists", "greater_or_equal", "less_or_equal", "contains"]
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    },
+    "trigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "day", "phase"],
+          "properties": {
+            "type": {"const": "campaign_time"},
+            "day": {"type": "integer", "minimum": 1},
+            "phase": {
+              "enum": ["dawn", "morning", "midday", "afternoon", "evening", "night", "late_night"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "due_elapsed_campaign_minutes"],
+          "properties": {
+            "type": {"const": "elapsed_time"},
+            "due_elapsed_campaign_minutes": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "due_long_rest_count"],
+          "properties": {
+            "type": {"const": "long_rest"},
+            "due_long_rest_count": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "condition"],
+          "properties": {
+            "type": {"const": "state_condition"},
+            "condition": {"$ref": "#/$defs/condition"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "transition_key"],
+          "properties": {
+            "type": {"const": "transition"},
+            "transition_key": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "title": "Deferred Event Scheduler State",
+  "type": "object",
+  "required": ["schema_version", "events"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "dedupe_key", "trigger", "references", "guard", "created_at"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "status": {"enum": ["pending", "resolved", "cancelled"]},
+          "dedupe_key": {"type": "string", "minLength": 1},
+          "trigger": {"$ref": "#/$defs/trigger"},
+          "references": {
+            "type": "object",
+            "additionalProperties": {"type": "string", "minLength": 1}
+          },
+          "guard": {
+            "anyOf": [
+              {"type": "null"},
+              {"$ref": "#/$defs/condition"}
+            ]
+          },
+          "created_at": {
+            "type": "object",
+            "required": ["day", "phase", "elapsed_campaign_minutes", "long_rests_completed"],
+            "properties": {
+              "day": {"type": "integer", "minimum": 1},
+              "phase": {"$ref": "#/$defs/phase"},
+              "elapsed_campaign_minutes": {"type": "integer", "minimum": 0},
+              "long_rests_completed": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
