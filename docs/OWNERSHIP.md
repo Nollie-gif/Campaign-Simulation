@@ -9,5 +9,7 @@
 | Save manifest | Campaign data repository |
 | Runtime preference | Local ignored runtime directory |
 | External knowledge projection | Optional derived store |
+| Main-campaign admission manifest | Main campaign data repository |
+| Sequel bootstrap request | Sequel mission data repository |
 
 Each record has one authoritative owner. A derived copy may exist only when it identifies its source record and revision.
