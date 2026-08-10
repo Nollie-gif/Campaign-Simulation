@@ -23,7 +23,7 @@ def populated_values(value: object, path: str = "$") -> list[str]:
 
 def main() -> int:
     failures: list[str] = []
-    for template_path in sorted(TEMPLATE_DIRECTORY.glob("*.json")):
+    for template_path in sorted(TEMPLATE_DIRECTORY.rglob("*.json")):
         data = json.loads(template_path.read_text(encoding="utf-8"))
         for location in populated_values(data):
             failures.append(f"{template_path.relative_to(ROOT)}: populated value at {location}")
