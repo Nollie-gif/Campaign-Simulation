@@ -36,9 +36,23 @@ When the Prequel reaches the Main Campaign boundary, it freezes at the convergen
 
 ### Explore the future — Sequel
 
-The Sequel continues forward from the Main Campaign's current situation by default.
+The Sequel continues forward from the accepted Main Campaign state.
 
-If you prefer, you can give it another forward starting point.
+If you prefer, you can give it another forward starting point inside that accepted campaign state.
+
+## The Prequel lock
+
+A Prequel save can never be used directly to start a Sequel.
+
+This is intentional. A Prequel may contain drastic alternate events that conflict with the Main Campaign. Letting a Sequel inherit those events automatically would make the source of truth ambiguous.
+
+Instead, the safe handoff is:
+
+**Prequel save → review or establish Main Campaign state → Sequel**
+
+If you want something from the Prequel to become real canon, use the Prequel save as review material and explicitly accept the intended changes into the Main Campaign first. Only the accepted Main Campaign may start a Sequel.
+
+This means you can absolutely play a Prequel, use its save data to help establish the Main Campaign you want, and then continue into a Sequel — but the Main Campaign always remains the required bridge.
 
 ## You do not need to write a book first
 
@@ -70,7 +84,7 @@ The Prequel explores a historical branch before the Main Campaign. It may discov
 
 ### Sequel branch
 
-The Sequel explores a future branch after the Main Campaign's current state. Its hooks, scenarios, consequences, saves, and world changes belong to the simulation unless you deliberately promote something later.
+The Sequel explores a future branch after the accepted Main Campaign state. Its hooks, scenarios, consequences, saves, and world changes belong to the simulation unless you deliberately promote something later.
 
 ## When a Prequel reaches the Main Campaign
 
@@ -81,6 +95,8 @@ The branch is preserved at a committed checkpoint and you choose one of three pa
 1. **Enter Main unchanged** — continue with the Main Campaign exactly as it already exists.
 2. **Propose canon changes** — produce a reviewable proposal; nothing changes automatically.
 3. **Continue as an alternate timeline** — keep the Prequel branch independent.
+
+Whichever option you choose, the Prequel checkpoint itself does not become a Sequel source.
 
 There is no automatic merge and no automatic canon promotion.
 
