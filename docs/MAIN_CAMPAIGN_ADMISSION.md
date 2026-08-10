@@ -29,3 +29,8 @@ On an admission failure the runtime creates no configuration, asks no Supabase q
 ## Boundary
 
 The sequel may read a declared main-campaign revision as its source. It never writes back to the main campaign. Any later canon promotion is a deliberate user-controlled operation outside this engine.
+
+Character-profile references must be relative paths that resolve inside the chosen
+main-campaign directory. Absolute paths, `../` escapes, and symlinks that resolve
+outside that directory are rejected. A sequel therefore cannot accidentally read
+unrelated local files while validating its campaign foundation.

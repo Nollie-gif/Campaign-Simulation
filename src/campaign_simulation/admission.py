@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 
 MAIN_CAMPAIGN_MANIFEST = "main-campaign-manifest.json"
+
+
 class MainCampaignAdmissionError(ValueError):
     """Raised when a sequel would start without an adequate campaign foundation."""
 
@@ -38,7 +40,21 @@ def validate_main_campaign_manifest(manifest: Mapping[str, object]) -> list[str]
 
 
 def _load_usable_character_profile(main_campaign_root: Path, reference: str) -> dict[str, Any]:
-    profile_path = main_campaign_root / reference
+    declared_path = Path(reference)
+    if declared_path.is_absolute():
+        raise MainCampaignAdmissionError(
+            f"character profile reference must be relative to the main campaign: {reference}"
+        )
+
+    resolved_root = main_campaign_root.resolve()
+    profile_path = (resolved_root / declared_path).resolve()
+    try:
+        profile_path.relative_to(resolved_root)
+    except ValueError as error:
+        raise MainCampaignAdmissionError(
+            f"character profile reference escapes the main campaign: {reference}"
+        ) from error
+
     if not profile_path.is_file():
         raise MainCampaignAdmissionError(f"character profile is missing: {reference}")
     try:
@@ -54,7 +70,11 @@ def _load_usable_character_profile(main_campaign_root: Path, reference: str) -> 
 
 def admit_main_campaign(main_campaign_root: Path) -> dict[str, object]:
     """Load and validate a main-campaign manifest before any sequel action occurs."""
-    manifest_path = main_campaign_root / MAIN_CAMPAIGN_MANIFEST
+    resolved_root = main_campaign_root.resolve()
+    if not resolved_root.is_dir():
+        raise MainCampaignAdmissionError("sequel simulation is blocked: main campaign directory is missing")
+
+    manifest_path = resolved_root / MAIN_CAMPAIGN_MANIFEST
     if not manifest_path.is_file():
         raise MainCampaignAdmissionError(
             "sequel simulation is blocked: main-campaign-manifest.json is missing"
@@ -67,5 +87,5 @@ def admit_main_campaign(main_campaign_root: Path) -> dict[str, object]:
         raise MainCampaignAdmissionError("main campaign manifest must be an object")
     references = validate_main_campaign_manifest(manifest)
     for reference in references:
-        _load_usable_character_profile(main_campaign_root, reference)
+        _load_usable_character_profile(resolved_root, reference)
     return manifest
