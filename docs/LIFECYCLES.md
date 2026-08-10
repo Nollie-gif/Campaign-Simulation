@@ -26,3 +26,18 @@ A save is committed only from `validated`. A complete checkpoint persists the
 committed manifest and the snapshots of every declared record together in one
 atomic file. Blank IDs, invalid timestamps, empty revision lists, mismatched
 record revisions, and direct `prepared -> committed` writes are refused.
+
+## Prequel → Main convergence
+
+When a prequel reaches the declared scene where the Main Campaign begins or
+converges, it enters `frozen_at_main_boundary`. The engine creates an explicit
+decision state and **does not write to Main Campaign**. The player then chooses
+one of exactly three paths:
+
+1. `enter_main_unchanged` — resume the existing Main Campaign exactly as it is.
+2. `propose_canon_changes` — produce reviewable proposed changes; a separate,
+   explicit Main Campaign owner approval is required before any write.
+3. `continue_as_alternate_timeline` — continue the prequel as an independent
+   timeline without merging it into Main.
+
+There is intentionally no automatic merge or automatic canon promotion.

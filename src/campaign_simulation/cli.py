@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Sequence
 
 from .admission import MainCampaignAdmissionError, admit_main_campaign
+from .boundaries import CampaignBoundaryError
+from .convergence import begin_prequel_main_convergence, resolve_prequel_main_convergence
 from .onboarding import CONTINUE_WITHOUT_OPTIONAL_MATERIAL
 from .runtime import begin_sequel_onboarding, complete_sequel_onboarding
+from .saves import load_checkpoint
 
 
 def _parse_optional_selection(value: str | None, non_interactive: bool) -> list[str]:
@@ -71,6 +74,15 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--supabase-url")
     start.add_argument("--supabase-key-env-var", default="SUPABASE_KEY")
     start.add_argument("--non-interactive", action="store_true")
+
+    converge = subcommands.add_parser(
+        "converge-prequel", help="freeze a prequel at its Main Campaign convergence boundary"
+    )
+    converge.add_argument("--main-campaign", required=True, type=Path)
+    converge.add_argument("--prequel-checkpoint", required=True, type=Path)
+    converge.add_argument("--main-target", required=True)
+    converge.add_argument("--choice", choices=("enter_main_unchanged", "propose_canon_changes", "continue_as_alternate_timeline"))
+    converge.add_argument("--proposal-json", default="[]")
     return parser
 
 
@@ -83,6 +95,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps({"status": "admitted", "main_campaign": manifest}, indent=2))
             return 0
 
+        if args.command == "converge-prequel":
+            # Admission makes the chosen Main Campaign explicit; convergence
+            # itself remains read-only and produces a decision record only.
+            admit_main_campaign(args.main_campaign)
+            convergence = begin_prequel_main_convergence(
+                load_checkpoint(args.prequel_checkpoint), args.main_target
+            )
+            if args.choice:
+                proposal = json.loads(args.proposal_json)
+                if not isinstance(proposal, list):
+                    raise ValueError("--proposal-json must be a JSON list")
+                convergence = resolve_prequel_main_convergence(convergence, args.choice, proposal)
+            print(json.dumps(convergence, indent=2))
+            return 0
+
         onboarding = begin_sequel_onboarding(args.main_campaign)
         if not args.non_interactive:
             _show_optional_material_menu(onboarding["optional_material_menu"])
@@ -93,7 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             selected_optional_material,
             input_fn=_storage_input(args),
         )
-    except (MainCampaignAdmissionError, ValueError, RuntimeError) as error:
+    except (CampaignBoundaryError, MainCampaignAdmissionError, ValueError, RuntimeError) as error:
         print(f"campaign-simulation: {error}", file=sys.stderr)
         return 2
 

@@ -30,6 +30,12 @@ On an admission failure the runtime creates no configuration, asks no Supabase q
 
 The sequel may read a declared main-campaign revision as its source. It never writes back to the main campaign. Any later canon promotion is a deliberate user-controlled operation outside this engine.
 
+This is enforced for runtime paths: a sequel runtime configuration, checkpoint,
+or other write target may not be inside the selected Main Campaign directory or
+in a parent directory that contains it. The engine therefore refuses both
+`--runtime /path/to/main-campaign` and broad choices such as
+`--runtime /path/to` when `/path/to/main-campaign` is the selected source.
+
 Character-profile references must be relative paths that resolve inside the chosen
 main-campaign directory. Absolute paths, `../` escapes, and symlinks that resolve
 outside that directory are rejected. A sequel therefore cannot accidentally read

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prequel Main Campaign Convergence Decision",
+  "type": "object",
+  "required": [
+    "status",
+    "prequel_status",
+    "prequel_checkpoint_id",
+    "main_campaign_target",
+    "allowed_choices",
+    "main_campaign_write_authorization",
+    "selected_choice",
+    "canon_change_proposal"
+  ],
+  "properties": {
+    "status": {"type": "string", "minLength": 1},
+    "prequel_status": {"type": "string", "minLength": 1},
+    "prequel_checkpoint_id": {"type": "string", "minLength": 1},
+    "main_campaign_target": {"type": "string", "minLength": 1},
+    "allowed_choices": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+    "main_campaign_write_authorization": {"const": "never_automatic"},
+    "selected_choice": {"type": "string"},
+    "canon_change_proposal": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": false
+}

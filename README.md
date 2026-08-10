@@ -1,7 +1,5 @@
 # Campaign Simulation Framework
 
-> **New here?** Start with the plain-language [Human User Guide](HUMAN_README.md) to understand the purpose of the framework, canon protection, and the sequel-sandbox workflow before using the technical setup below.
-
 This repository is a reusable, campaign-neutral foundation for starting and running a simulation sequel.
 
 It contains no campaign data, names, locations, characters, or populated examples.
@@ -53,6 +51,8 @@ begin.
 - persisted hook and scenario identifier allocation
 - atomic full-checkpoint persistence
 - credential-safe Supabase validation and repository fallback
+- hard read-only Main Campaign write boundary
+- explicit Prequel → Main Convergence Gate with no automatic merge
 
 ## Verification
 
