@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scenario Record",
+  "type": "object",
+  "required": ["id", "title", "status", "trigger", "constraints", "completion", "hook_ids"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["draft", "available", "active", "completed", "abandoned", "expired"]},
+    "trigger": {"type": "object"},
+    "constraints": {"type": "array"},
+    "completion": {"type": "object"},
+    "hook_ids": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
