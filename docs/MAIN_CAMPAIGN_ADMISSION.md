@@ -1,25 +1,28 @@
 # Main Campaign Admission Gate
 
-A sequel simulation can start only from a separate, populated main-campaign data repository. The engine never guesses missing campaign information and never imports it into this repository.
+A sequel simulation can start only from a separate main-campaign data repository. The engine never guesses missing campaign information and never imports it into this repository.
 
 ## Required source file
 
 The main campaign repository must contain a populated `main-campaign-manifest.json`, created from `templates/main-campaign-manifest.template.json`.
 
-The manifest must:
+The manifest must contain only:
 
-1. declare itself as `main-campaign`;
-2. identify the source campaign and immutable source revision;
-3. set `readiness.status` to `ready`;
-4. provide evidence record identifiers for every required coverage area.
+1. a short campaign history;
+2. a starting situation;
+3. one or more references to usable character profiles.
 
-The coverage areas are campaign context, world state, participants, timeline, knowledge boundaries, and open threads. `not_applicable` is allowed only when it is explicit and still points to a record explaining that decision. This prevents silent gaps.
+Each referenced character profile needs a character name and short character summary. This is the **Minimum Playable Campaign Gate**: enough information to begin play without demanding a world encyclopedia.
+
+Supporting characters, locations, organizations, items, relationships, timeline records, and knowledge boundaries are all optional. After admission, the engine must show the user these capabilities and explicitly offer **Continue without adding material**.
 
 ## Enforced startup order
 
 1. Validate the main-campaign manifest.
-2. Only if admitted, select or load the storage mode.
-3. Only then create a sequel bootstrap request, scenario state, hooks, or saves.
+2. Only if admitted, display the optional-material menu.
+3. Accept an optional selection, including no additional material.
+4. Only then select or load the storage mode.
+5. Only then create a sequel bootstrap request, scenario state, hooks, or saves.
 
 On an admission failure the runtime creates no configuration, asks no Supabase question, and writes no sequel record. The error names the missing requirement so a user can finish the main campaign setup first.
 
