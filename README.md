@@ -1,31 +1,32 @@
-# Campaign Simulation
+# Campaign Simulation Framework
 
-Reusable, campaign-neutral simulation foundation.
+This repository is a reusable, campaign-neutral foundation for starting and running a simulation sequel.
 
-This repository contains mechanics, contracts, blank templates, and validation only. It must never contain a populated campaign record, a real person, a real place, a real organization, or a named scenario.
+It contains no campaign data, names, locations, characters, or populated examples.
 
-## What is included
+## Start here
+
+1. Complete the three minimum playable inputs described in [Onboarding](docs/ONBOARDING.md).
+2. Run the admission check.
+3. Review the optional campaign-material menu.
+4. Either add material now or continue directly to storage setup and play.
+
+The optional-material menu is informational and never blocks play.
+
+## Included mechanics
 
 - scenario lifecycle contract
 - hook lifecycle contract
 - quick-save and final-save contract
 - first-boot storage selection with repository fallback
-- blank entity-card templates
-- blank-template validator
-- main-campaign admission gate before any sequel runtime starts
+- blank entity, scenario, hook, save, and session templates
+- Minimum Playable Campaign Gate
+- optional campaign-material onboarding
 
-## Operating rule
+## Verification
 
-Create a campaign-specific data repository before creating any record. If a required record does not have an approved blank template, do not add the record here or in a campaign repository; add the missing template through a deliberate design change first.
-
-## Required start order
-
-A sequel simulation does **not** start from an empty repository. It first requires a separate main-campaign data repository with a valid, populated `main-campaign-manifest.json`. The runtime validates that source before it asks about storage, initializes Supabase, creates a scenario, allocates a hook, or saves anything.
-
-See [Main Campaign Admission Gate](docs/MAIN_CAMPAIGN_ADMISSION.md).
-
-## Local validation
+Run:
 
 ```bash
-python3 tools/validate_blank_templates.py
+python -m unittest discover -s tests -v
 ```
