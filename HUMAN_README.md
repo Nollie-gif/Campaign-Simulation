@@ -99,6 +99,23 @@ Your campaign can be written in Greek, English, or any other language.
 
 The framework's technical keys and internal contracts remain in English for consistency, but your story, character descriptions, notes, dialogue, and sequel content do not need to be translated.
 
+## When a prequel reaches the Main Campaign
+
+A prequel is another safe experiment: it explores what happened before your
+established campaign without silently rewriting the story you already know.
+
+When the prequel reaches the scene where your Main Campaign begins, it stops at
+a **convergence gate**. The prequel is preserved as a historical branch and
+you choose what happens next:
+
+1. **Enter Main unchanged** — continue the Main Campaign exactly as it already exists.
+2. **Propose canon changes** — review a clear proposal before any canon edit is made.
+3. **Continue as an alternate timeline** — keep the prequel independent and never merge it into Main.
+
+There is no automatic merge and no automatic canon promotion. The framework
+cannot write its runtime files inside the Main Campaign directory either, so
+the technical boundary matches the storytelling promise.
+
 ## First-time flow
 
 For a new user, the intended experience is simple:
