@@ -219,6 +219,27 @@ class CliTests(unittest.TestCase):
             self.assertIn('"status": "started"', stdout.getvalue())
             self.assertTrue((root / "runtime" / "storage-configuration.json").is_file())
 
+    def test_interactive_start_shows_optional_capabilities_before_prompting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            campaign = root / "main-campaign"
+            _write_minimum_campaign(campaign)
+            responses = iter(["", "repository"])
+            stdout = io.StringIO()
+            with patch("builtins.input", side_effect=lambda _: next(responses)), redirect_stdout(stdout):
+                result = cli_main(
+                    [
+                        "start",
+                        "--main-campaign",
+                        str(campaign),
+                        "--runtime",
+                        str(root / "runtime"),
+                    ]
+                )
+            self.assertEqual(result, 0)
+            self.assertIn("supporting_character", stdout.getvalue())
+            self.assertIn("Continue without adding material", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
