@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Autosave State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "last_observed_day",
+    "last_observed_phase",
+    "automatic_saves_today",
+    "last_autosave_day",
+    "last_autosave_phase",
+    "resolved_scenes_since_autosave",
+    "meaningful_changes_since_autosave",
+    "last_saved_state_fingerprint"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "last_observed_day": {"type": "integer", "minimum": 1},
+    "last_observed_phase": {
+      "enum": ["unknown", "dawn", "morning", "midday", "afternoon", "evening", "night", "late_night"]
+    },
+    "automatic_saves_today": {"type": "integer", "minimum": 0},
+    "last_autosave_day": {"type": ["integer", "null"], "minimum": 1},
+    "last_autosave_phase": {
+      "anyOf": [
+        {"type": "null"},
+        {"enum": ["unknown", "dawn", "morning", "midday", "afternoon", "evening", "night", "late_night"]}
+      ]
+    },
+    "resolved_scenes_since_autosave": {"type": "integer", "minimum": 0},
+    "meaningful_changes_since_autosave": {"type": "boolean"},
+    "last_saved_state_fingerprint": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

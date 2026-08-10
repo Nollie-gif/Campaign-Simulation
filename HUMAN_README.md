@@ -108,6 +108,20 @@ Until you explicitly approve a change:
 
 **Main Campaign canon remains Main Campaign canon. Simulation remains simulation.**
 
+## Campaign time and things the world must remember
+
+The simulation runtime can keep track of in-world time without using real-world clock time.
+
+It separates broad story time such as **Day 4 / Afternoon** from an internal monotonic duration cursor used only when the fiction establishes a real duration such as **six hours later** or **after the next Long Rest**. If the exact duration is unknown, the engine does not invent it.
+
+The Deferred Event Scheduler can then remember future obligations for the DM: a deadline, the next Long Rest, a state condition, or a transition that should matter later.
+
+When one becomes eligible, the engine does **not** write the story for you. It surfaces the pending event to the DM/runtime, which decides the consequence normally. The resulting world change and the event's resolution are saved together.
+
+This means an interrupted save does not silently lose a deadline: before the resolution is committed, the event remains pending and can surface again after reload.
+
+Automatic Autosave uses the same Campaign Time foundation to decide when meaningful progress deserves a checkpoint. It never replaces the existing save system; it only asks that system to save.
+
 ## Language
 
 Your campaign can be written in Greek, English, or any other language.
