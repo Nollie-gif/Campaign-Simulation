@@ -1,8 +1,12 @@
 # Campaign Simulation Framework
 
-This repository is a reusable, campaign-neutral foundation for starting and running a simulation sequel.
+Campaign Simulation is a reusable, campaign-neutral framework for exploring a protected Main Campaign in either direction:
 
-It contains no campaign data, names, locations, characters, or populated examples.
+**Prequel ← Main Campaign → Sequel**
+
+The Main Campaign is the authoritative canon anchor. Simulation branches may read it, reason from it, and preserve continuity with it, but they never write into it automatically.
+
+This repository contains no campaign data, names, locations, characters, or populated examples.
 
 ## Start here
 
@@ -16,38 +20,48 @@ It contains no campaign data, names, locations, characters, or populated example
 3. Start the guided setup:
 
    ```bash
-   campaign-simulation start --main-campaign /path/to/main-campaign --runtime /path/to/sequel-runtime
+   campaign-simulation start --main-campaign /path/to/main-campaign --runtime /path/to/simulation-runtime
    ```
 
    The equivalent module command is `python -m campaign_simulation start ...`.
-4. Review the optional campaign-material menu.
-5. Either add material now or continue directly to storage setup and play.
+4. Choose what you want to explore:
+   - **Prequel** — choose a historical anchor before the Main Campaign.
+   - **Sequel** — continue from the Main Campaign's current situation or provide another forward anchor.
+5. Review the optional campaign-material menu.
+6. Choose repository or optional Supabase-backed storage and begin.
 
 The optional-material menu is informational and never blocks play.
 
+## Branch model
+
+Both Prequel and Sequel simulations move **forward in time**.
+
+A Prequel does not reverse time. It starts from a user-selected historical anchor and advances toward the known Main Campaign. When it reaches the Main Campaign boundary, the existing convergence gate freezes the branch and asks the user what to do next.
+
+A Sequel starts from the Main Campaign's current situation by default, or from another forward anchor supplied by the user.
+
+See [Branching](docs/BRANCHING.md) for the complete contract.
+
 ## Language policy
 
-The framework's technical layer is deliberately written in English: source code,
-command names, JSON keys, schema identifiers, and lifecycle values are stable
-machine-facing contracts.
+The framework's technical layer is deliberately written in English: source code, command names, JSON keys, schema identifiers, and lifecycle values are stable machine-facing contracts.
 
-Campaign prose is language-neutral. A main campaign and its sequel may be written
-entirely in Greek, English, or any other language without changing a technical
-file, ID, schema, or runtime rule. The engine preserves campaign text as supplied;
-it does not require a translation or a `content_language` field before play can
-begin.
+Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be written entirely in Greek, English, or any other language without changing a technical file, ID, schema, or runtime rule. The engine preserves campaign text as supplied and does not require translation before play can begin.
 
 ## Included mechanics
 
+- branch-neutral Prequel / Sequel onboarding
+- historical-anchor Prequel bootstrap
+- forward-anchor Sequel bootstrap
 - scenario lifecycle contract
 - hook lifecycle contract
 - quick-save and final-save contract
 - first-boot storage selection with repository fallback
 - command-line guided startup (`campaign-simulation start`)
-- blank entity, scenario, hook, save, and session templates
+- blank entity, scenario, hook, save, session, and simulation-bootstrap templates
 - Minimum Playable Campaign Gate
 - optional campaign-material onboarding
-- path-safe main-campaign references
+- path-safe Main Campaign references
 - persisted hook and scenario identifier allocation
 - atomic full-checkpoint persistence
 - credential-safe Supabase validation and repository fallback
