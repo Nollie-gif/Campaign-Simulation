@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Main Campaign Admission Manifest",
+  "type": "object",
+  "required": ["repository_role", "campaign_id", "source_revision", "readiness", "information_coverage"],
+  "properties": {
+    "repository_role": {"const": "main-campaign"},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "readiness": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {"status": {"const": "ready"}}
+    },
+    "information_coverage": {"type": "object"}
+  }
+}
