@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from campaign_simulation.bootstrap import REPOSITORY_MODE, resolve_storage_mode
 from campaign_simulation.admission import MainCampaignAdmissionError, admit_main_campaign
 from campaign_simulation.lifecycles import HOOK_TRANSITIONS, allocate_identifier, transition
-from campaign_simulation.runtime import initialize_sequel_runtime
+from campaign_simulation.runtime import begin_sequel_onboarding, complete_sequel_onboarding
 from campaign_simulation.saves import commit_manifest
 
 
@@ -68,7 +68,7 @@ class FoundationTests(unittest.TestCase):
                 return "repository"
 
             with self.assertRaises(MainCampaignAdmissionError):
-                initialize_sequel_runtime(root / "main-campaign", config_path, forbidden_input)
+                begin_sequel_onboarding(root / "main-campaign")
             self.assertFalse(input_called)
             self.assertFalse(config_path.exists())
 
@@ -77,23 +77,26 @@ class FoundationTests(unittest.TestCase):
             root = Path(temporary_directory)
             source = root / "main-campaign"
             source.mkdir()
-            coverage = {
-                area: {"status": "complete", "evidence_record_ids": [f"record-{index:06d}"]}
-                for index, area in enumerate(
-                    ("campaign_context", "world_state", "participants", "timeline", "knowledge_boundaries", "open_threads"),
-                    start=1,
-                )
-            }
             manifest = {
-                "repository_role": "main-campaign",
-                "campaign_id": "campaign-000001",
-                "source_revision": "revision-000001",
-                "readiness": {"status": "ready"},
-                "information_coverage": coverage,
+                "campaign_history": "A short history.",
+                "starting_situation": "A current situation.",
+                "character_profile_references": ["characters/character.json"],
             }
             (source / "main-campaign-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-            result = initialize_sequel_runtime(source, root / "runtime" / "storage.json", lambda _: "repository")
-            self.assertEqual(result["main_campaign"]["campaign_id"], "campaign-000001")
+            characters = source / "characters"
+            characters.mkdir()
+            (characters / "character.json").write_text(
+                json.dumps({"character_name": "A character", "character_summary": "A playable participant."}),
+                encoding="utf-8",
+            )
+            onboarding = begin_sequel_onboarding(source)
+            self.assertEqual(onboarding["status"], "choose_optional_material")
+            result = complete_sequel_onboarding(
+                source,
+                root / "runtime" / "storage.json",
+                ["continue_without_adding_material"],
+                lambda _: "repository",
+            )
             self.assertEqual(result["storage"]["storage_mode"], REPOSITORY_MODE)
 
 
