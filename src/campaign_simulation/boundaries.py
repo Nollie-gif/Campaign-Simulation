@@ -1,4 +1,4 @@
-"""Hard ownership boundaries between a main campaign and its sequel runtime."""
+"""Hard ownership boundaries between a Main Campaign and simulation runtimes."""
 
 from __future__ import annotations
 
@@ -6,27 +6,21 @@ from pathlib import Path
 
 
 class CampaignBoundaryError(ValueError):
-    """Raised when a sequel action could write into its read-only source."""
+    """Raised when a simulation action could write into its read-only source."""
 
 
-def assert_sequel_write_path(main_campaign_root: Path, sequel_write_path: Path) -> Path:
-    """Return a safe write path or reject any overlap with the main campaign.
-
-    The main campaign is an immutable source from the sequel engine's point of
-    view. Rejecting both descendants and ancestors closes the easy mistake of
-    choosing either the main-campaign folder itself or a broad parent folder as
-    the sequel runtime.
-    """
+def assert_simulation_write_path(main_campaign_root: Path, simulation_write_path: Path) -> Path:
+    """Return a safe write path or reject any overlap with the Main Campaign."""
 
     main_root = main_campaign_root.resolve()
-    target = sequel_write_path.resolve()
+    target = simulation_write_path.resolve()
     try:
         target.relative_to(main_root)
     except ValueError:
         pass
     else:
         raise CampaignBoundaryError(
-            "sequel runtime write path overlaps the read-only main campaign directory"
+            "simulation runtime write path overlaps the read-only main campaign directory"
         )
 
     try:
@@ -34,5 +28,11 @@ def assert_sequel_write_path(main_campaign_root: Path, sequel_write_path: Path) 
     except ValueError:
         return target
     raise CampaignBoundaryError(
-        "sequel runtime write path is an ancestor of the read-only main campaign directory"
+        "simulation runtime write path is an ancestor of the read-only main campaign directory"
     )
+
+
+def assert_sequel_write_path(main_campaign_root: Path, sequel_write_path: Path) -> Path:
+    """Backward-compatible alias for the branch-neutral write-boundary guard."""
+
+    return assert_simulation_write_path(main_campaign_root, sequel_write_path)
