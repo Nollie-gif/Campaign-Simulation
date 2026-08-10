@@ -5,6 +5,8 @@
   "main_campaign_target": "",
   "allowed_choices": [],
   "main_campaign_write_authorization": "",
+  "sequel_source_policy": "",
+  "prequel_checkpoint_role": "",
   "selected_choice": "",
   "canon_change_proposal": []
 }
