@@ -2,48 +2,43 @@
 
 ## What this is
 
-Campaign Simulation is a safe way to continue, explore, and experiment with a tabletop campaign without rewriting the campaign that already happened.
+Campaign Simulation lets you explore what may have happened **before** your tabletop campaign or what may happen **after** it, without silently rewriting the campaign you already consider canon.
 
-You give the framework your existing campaign history. That history becomes the **authoritative Main Campaign canon**.
+You provide your existing campaign material. That becomes the **authoritative Main Campaign**.
 
-The framework treats that canon as something to preserve, not something to improve, rewrite, retcon, or replace.
+The framework then creates a separate simulation branch around it:
 
-Its job is then to create a separate **simulation sequel** where you can explore what might happen next.
+**Prequel ← Main Campaign → Sequel**
+
+The Main Campaign stays protected. The simulation is the place where experimentation happens.
 
 ## The core idea
 
 Your Main Campaign is the source of truth.
 
-What already happened stays what happened.
+What already happened stays what happened unless you explicitly choose to review and promote a change later.
 
-The framework may organize, index, summarize, or carefully interpret the material you provide so it can understand it consistently, but it must not silently change established facts. If something is unclear or missing, the safe behavior is to preserve the uncertainty rather than invent a replacement canon.
+The framework may read, organize, summarize, index, and reason from the Main Campaign so it can preserve continuity. It must not silently replace established facts. If something is unclear, the safe behavior is to preserve that uncertainty rather than invent replacement canon.
 
-Any new idea created during the sequel belongs to the sequel simulation only. It does **not** become part of the Main Campaign unless you explicitly decide to promote it later.
+## Choose what you want to explore
 
-Think of it as:
+After the Main Campaign passes the lightweight admission check, the framework asks one simple question:
 
-**Your Campaign → protected canon → separate sequel sandbox**
+**What would you like to explore?**
 
-## Why use it
+### Explore the past — Prequel
 
-A DM or GM can use the sequel sandbox to experiment with future sessions before committing anything to the real campaign.
+Choose a short historical anchor describing where the simulation should begin. One sentence is enough.
 
-You can explore things such as:
+The Prequel then runs **forward in time** from that point. It does not run the clock backwards.
 
-- possible story directions
-- consequences of player decisions
-- future conflicts and scenarios
-- narrative hooks
-- NPC or faction developments
-- locations or discoveries
-- political, economic, or world-state consequences
-- alternative outcomes
-- long-running character developments
-- ideas you may later adapt for a real session
+When the Prequel reaches the Main Campaign boundary, it freezes at the convergence gate and waits for your explicit choice.
 
-You are free to experiment because the simulation is separated from the original campaign canon.
+### Explore the future — Sequel
 
-A bad idea can simply remain a simulation. A great idea can later inspire your real campaign.
+The Sequel continues forward from the Main Campaign's current situation by default.
+
+If you prefer, you can give it another forward starting point.
 
 ## You do not need to write a book first
 
@@ -51,45 +46,49 @@ The framework is intentionally designed to start small.
 
 The minimum playable foundation is:
 
-1. **A short campaign history** — enough to explain what has happened so far.
+1. **A short campaign history** — enough to understand what has happened.
 2. **At least one character profile or character sheet** — enough to understand who is involved.
-3. **A starting situation** — where the sequel begins and what the immediate situation is.
+3. **A current starting situation** — enough to understand where the Main Campaign stands now.
 
 That is enough to begin.
 
 You do not need to document every NPC, location, organization, item, secret, relationship, or historical event before playing.
 
-After the minimum foundation is accepted, the framework can show you the optional material it supports and ask whether you want to add any of it. You may add more information immediately, add it later, or continue without it.
-
-Optional material must never become a barrier to play.
+After admission, the framework shows the optional material it supports. You may add more information now, later, or never. Optional material must never become a barrier to play.
 
 ## What happens to your original story
-
-The Main Campaign and the sequel have different roles.
 
 ### Main Campaign
 
 The Main Campaign contains the history and facts you already consider canon.
 
-It is treated as authoritative reference material.
+It is authoritative reference material and is read-only to the simulation framework.
 
-The sequel may read it, reason from it, and preserve continuity with it, but the sequel must not write its simulated developments back into the Main Campaign automatically.
+### Prequel branch
 
-### Simulation Sequel
+The Prequel explores a historical branch before the Main Campaign. It may discover possibilities, consequences, motives, relationships, and events, but those discoveries do not silently rewrite the Main Campaign.
 
-The sequel is the experimental continuation.
+### Sequel branch
 
-This is where new scenarios, hooks, consequences, saves, world changes, and speculative developments belong.
+The Sequel explores a future branch after the Main Campaign's current state. Its hooks, scenarios, consequences, saves, and world changes belong to the simulation unless you deliberately promote something later.
 
-The sequel may evolve freely because it is not allowed to overwrite the source campaign.
+## When a Prequel reaches the Main Campaign
+
+The Prequel stops at the **Prequel → Main Convergence Gate**.
+
+The branch is preserved at a committed checkpoint and you choose one of three paths:
+
+1. **Enter Main unchanged** — continue with the Main Campaign exactly as it already exists.
+2. **Propose canon changes** — produce a reviewable proposal; nothing changes automatically.
+3. **Continue as an alternate timeline** — keep the Prequel branch independent.
+
+There is no automatic merge and no automatic canon promotion.
 
 ## Canon promotion is always a human decision
 
-If something created in the sequel is so good that you want to use it in your real campaign, you can choose to promote or adapt it later.
+A simulation may inspire something you want to use in the real campaign. That is allowed, but the decision is yours.
 
-That promotion is deliberate. It should never happen silently.
-
-Until you make that decision:
+Until you explicitly approve a change:
 
 **Main Campaign canon remains Main Campaign canon. Simulation remains simulation.**
 
@@ -97,46 +96,29 @@ Until you make that decision:
 
 Your campaign can be written in Greek, English, or any other language.
 
-The framework's technical keys and internal contracts remain in English for consistency, but your story, character descriptions, notes, dialogue, and sequel content do not need to be translated.
-
-## When a prequel reaches the Main Campaign
-
-A prequel is another safe experiment: it explores what happened before your
-established campaign without silently rewriting the story you already know.
-
-When the prequel reaches the scene where your Main Campaign begins, it stops at
-a **convergence gate**. The prequel is preserved as a historical branch and
-you choose what happens next:
-
-1. **Enter Main unchanged** — continue the Main Campaign exactly as it already exists.
-2. **Propose canon changes** — review a clear proposal before any canon edit is made.
-3. **Continue as an alternate timeline** — keep the prequel independent and never merge it into Main.
-
-There is no automatic merge and no automatic canon promotion. The framework
-cannot write its runtime files inside the Main Campaign directory either, so
-the technical boundary matches the storytelling promise.
+The framework's technical keys and internal contracts remain in English for consistency, but your story, character descriptions, notes, dialogue, Prequel content, and Sequel content do not need to be translated.
 
 ## First-time flow
 
-For a new user, the intended experience is simple:
-
-1. Add your existing campaign history.
+1. Add a short Main Campaign history.
 2. Add at least one character sheet/profile.
-3. Describe the situation where you want the sequel to begin.
-4. Optionally add NPCs, locations, organizations, items, relationships, timeline material, knowledge boundaries, or other supported campaign material.
-5. Choose the storage mode you want to use.
-6. Start the sequel simulation.
-7. Save and continue the simulation without modifying the original campaign canon.
+3. Describe the Main Campaign's current situation.
+4. Choose **Prequel** or **Sequel**.
+5. If you choose Prequel, describe where in the past you want to begin.
+6. Optionally add supporting characters, locations, organizations, items, relationships, timeline material, knowledge boundaries, or other supported material.
+7. Choose the storage mode.
+8. Start the simulation branch.
+9. Save and continue without modifying the Main Campaign canon.
 
 ## The promise of the framework
 
-The framework exists to give you freedom to experiment **without sacrificing continuity**.
+The framework exists to give you freedom to explore **both directions around your campaign without sacrificing continuity**.
 
-Your original story is the anchor.
+The Main Campaign is the anchor.
 
-The sequel is the laboratory.
+The Prequel and Sequel are laboratories.
 
-You decide what, if anything, ever crosses from the laboratory back into canon.
+You decide what, if anything, ever crosses back into canon.
 
 ---
 
