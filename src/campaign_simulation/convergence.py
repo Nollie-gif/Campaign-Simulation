@@ -16,6 +16,8 @@ CONVERGENCE_CHOICES = (
     PROPOSE_CANON_CHANGES,
     CONTINUE_ALTERNATE_TIMELINE,
 )
+SEQUEL_SOURCE_POLICY = "main_campaign_only"
+PREQUEL_CHECKPOINT_ROLE = "review_input_only"
 
 
 def _require_text(value: object, field: str) -> str:
@@ -27,10 +29,11 @@ def _require_text(value: object, field: str) -> str:
 def begin_prequel_main_convergence(
     prequel_checkpoint: Mapping[str, object], main_campaign_target: str
 ) -> dict[str, Any]:
-    """Freeze a completed prequel at the scene where it meets the main campaign.
+    """Freeze a completed prequel at the scene where it meets the Main Campaign.
 
-    This creates a review state only. It never opens, writes, or mutates the
-    main campaign, so reaching the same scene cannot silently retcon canon.
+    The checkpoint may be used to review or establish Main Campaign state, but
+    it is never itself a legal Sequel source. A Sequel may start only after the
+    user has accepted the intended state into Main Campaign.
     """
 
     if not isinstance(prequel_checkpoint, Mapping):
@@ -50,6 +53,8 @@ def begin_prequel_main_convergence(
         "main_campaign_target": _require_text(main_campaign_target, "main_campaign_target"),
         "allowed_choices": list(CONVERGENCE_CHOICES),
         "main_campaign_write_authorization": "never_automatic",
+        "sequel_source_policy": SEQUEL_SOURCE_POLICY,
+        "prequel_checkpoint_role": PREQUEL_CHECKPOINT_ROLE,
         "selected_choice": "",
         "canon_change_proposal": [],
     }
@@ -62,6 +67,10 @@ def resolve_prequel_main_convergence(
 
     if convergence.get("status") != "awaiting_main_convergence_choice":
         raise ValueError("prequel convergence is not awaiting a choice")
+    if convergence.get("sequel_source_policy") != SEQUEL_SOURCE_POLICY:
+        raise ValueError("prequel convergence sequel source policy is invalid")
+    if convergence.get("prequel_checkpoint_role") != PREQUEL_CHECKPOINT_ROLE:
+        raise ValueError("prequel convergence checkpoint role is invalid")
     if choice not in CONVERGENCE_CHOICES:
         raise ValueError("prequel convergence choice is invalid")
     if canon_change_proposal is not None and not all(
@@ -72,6 +81,8 @@ def resolve_prequel_main_convergence(
     result = deepcopy(dict(convergence))
     result["selected_choice"] = choice
     result["main_campaign_write_authorization"] = "never_automatic"
+    result["sequel_source_policy"] = SEQUEL_SOURCE_POLICY
+    result["prequel_checkpoint_role"] = PREQUEL_CHECKPOINT_ROLE
     if choice == ENTER_MAIN_UNCHANGED:
         result["status"] = "main_entered_unchanged"
         result["canon_change_proposal"] = []
