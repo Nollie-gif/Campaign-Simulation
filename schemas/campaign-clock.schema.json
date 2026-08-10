@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Campaign Clock State",
+  "type": "object",
+  "required": ["schema_version", "day", "phase", "elapsed_campaign_minutes", "long_rests_completed"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "day": {"type": "integer", "minimum": 1},
+    "phase": {
+      "enum": ["unknown", "dawn", "morning", "midday", "afternoon", "evening", "night", "late_night"]
+    },
+    "elapsed_campaign_minutes": {"type": "integer", "minimum": 0},
+    "long_rests_completed": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}
