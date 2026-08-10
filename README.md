@@ -77,6 +77,14 @@ Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be w
 - hard read-only Main Campaign write boundary
 - explicit Prequel → Main Convergence Gate with no automatic merge
 
+## Platform compatibility
+
+Added cross-platform Windows compatibility and Windows CI coverage.
+
+The framework uses native advisory locking on supported platforms: POSIX `flock` on Unix-like systems and `msvcrt.locking()` on Windows. The GitHub Actions test matrix runs the full unit/integration suite and blank-template validation on both Ubuntu and Windows with Python 3.11.
+
+This is Windows-platform CI coverage, not a claim of certification for a specific Windows release. A separate real-machine smoke test may be used to record Windows 10-specific verification.
+
 ## Verification
 
 Run:
