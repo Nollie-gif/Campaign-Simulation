@@ -1,17 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Main Campaign Admission Manifest",
+  "title": "Minimum Playable Campaign Manifest",
   "type": "object",
-  "required": ["repository_role", "campaign_id", "source_revision", "readiness", "information_coverage"],
+  "required": ["campaign_history", "starting_situation", "character_profile_references"],
   "properties": {
-    "repository_role": {"const": "main-campaign"},
-    "campaign_id": {"type": "string", "minLength": 1},
-    "source_revision": {"type": "string", "minLength": 1},
-    "readiness": {
-      "type": "object",
-      "required": ["status"],
-      "properties": {"status": {"const": "ready"}}
+    "campaign_history": {"type": "string", "minLength": 1},
+    "starting_situation": {"type": "string", "minLength": 1},
+    "character_profile_references": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
     },
-    "information_coverage": {"type": "object"}
+    "optional_material_references": {"type": "array"}
   }
 }
