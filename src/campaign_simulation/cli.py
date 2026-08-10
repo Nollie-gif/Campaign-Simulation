@@ -45,6 +45,14 @@ def _storage_input(args: argparse.Namespace):
     return read
 
 
+def _show_optional_material_menu(menu: dict[str, object]) -> None:
+    """Display every non-blocking extension before asking for a selection."""
+
+    print(menu["message"])
+    for option in menu["options"]:
+        print(f"- {option['id']}: {option['label']}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="campaign-simulation")
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -76,6 +84,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         onboarding = begin_sequel_onboarding(args.main_campaign)
+        if not args.non_interactive:
+            _show_optional_material_menu(onboarding["optional_material_menu"])
         selected_optional_material = _parse_optional_selection(args.optional, args.non_interactive)
         result = complete_sequel_onboarding(
             args.main_campaign,
