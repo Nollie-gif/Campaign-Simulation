@@ -1,6 +1,7 @@
 {
   "storage_mode": "",
   "supabase_url": "",
+  "supabase_key_env_var": "",
   "supabase_schema": "",
   "fallback_reason": ""
 }

@@ -1,1 +1,2 @@
-"""Campaign-neutral simulation runtime helpers."""
+"""Campaign-neutral onboarding contracts."""
+

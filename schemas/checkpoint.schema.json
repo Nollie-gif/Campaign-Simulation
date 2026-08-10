@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simulation Checkpoint",
+  "type": "object",
+  "required": ["manifest", "records"],
+  "properties": {
+    "manifest": {"$ref": "save-manifest.schema.json"},
+    "records": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["revision", "data"],
+        "properties": {
+          "revision": {"type": "string", "minLength": 1},
+          "data": {"type": "object"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
