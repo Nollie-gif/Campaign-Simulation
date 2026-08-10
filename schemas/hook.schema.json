@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hook Record",
+  "type": "object",
+  "required": ["id", "status", "activation", "resolution", "linked_record_ids"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["dormant", "active", "resolved", "retired"]},
+    "activation": {"type": "object"},
+    "resolution": {"type": "object"},
+    "linked_record_ids": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
