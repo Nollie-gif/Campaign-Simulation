@@ -12,12 +12,24 @@ from typing import Any, Mapping
 PREQUEL_MODE = "prequel"
 SEQUEL_MODE = "sequel"
 SIMULATION_MODES = (PREQUEL_MODE, SEQUEL_MODE)
+MAIN_CAMPAIGN_SOURCE = "main_campaign"
+MAIN_CAMPAIGN_ONLY_SOURCE_POLICY = "main_campaign_only"
 
 
 def _require_text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"simulation branch requires a non-empty {field}")
     return value.strip()
+
+
+def _require_main_campaign_source(source_type: str) -> str:
+    normalized_source = _require_text(source_type, "source_type").lower()
+    if normalized_source != MAIN_CAMPAIGN_SOURCE:
+        raise ValueError(
+            "simulation branches may start only from the accepted Main Campaign; "
+            "a Prequel checkpoint must first be reviewed into Main Campaign before a Sequel can start"
+        )
+    return normalized_source
 
 
 def build_exploration_menu() -> dict[str, Any]:
@@ -35,25 +47,31 @@ def build_exploration_menu() -> dict[str, Any]:
             {
                 "id": SEQUEL_MODE,
                 "label": "Explore the future — Sequel",
-                "description": "Continue forward from the Main Campaign's current situation or another forward anchor.",
+                "description": "Continue forward from the accepted Main Campaign state or another forward anchor within it.",
             },
         ],
     }
 
 
 def resolve_simulation_branch(
-    main_campaign_manifest: Mapping[str, object], mode: str, anchor: str | None = None
+    main_campaign_manifest: Mapping[str, object],
+    mode: str,
+    anchor: str | None = None,
+    source_type: str = MAIN_CAMPAIGN_SOURCE,
 ) -> dict[str, str]:
-    """Create a branch contract without mutating the Main Campaign.
+    """Create a branch contract without mutating or bypassing the Main Campaign.
 
-    Both modes simulate forward in time. A prequel requires an explicit
-    historical anchor. A sequel may use the Main Campaign's starting/current
-    situation as its default forward anchor.
+    Both modes simulate forward in time and both must start from the accepted
+    Main Campaign. A Prequel checkpoint is never a legal Sequel source. If a
+    Prequel changes history, its checkpoint may be used as review input to
+    establish or update Main Campaign first; only that accepted Main Campaign
+    may then source a Sequel.
     """
 
     normalized_mode = _require_text(mode, "mode").lower()
     if normalized_mode not in SIMULATION_MODES:
         raise ValueError("simulation mode must be prequel or sequel")
+    normalized_source = _require_main_campaign_source(source_type)
 
     if normalized_mode == PREQUEL_MODE:
         resolved_anchor = _require_text(anchor, "historical anchor")
@@ -70,6 +88,8 @@ def resolve_simulation_branch(
     return {
         "mode": normalized_mode,
         "anchor": resolved_anchor,
+        "source_type": normalized_source,
+        "source_policy": MAIN_CAMPAIGN_ONLY_SOURCE_POLICY,
         "relative_position": relative_position,
         "time_direction": "forward",
         "main_campaign_access": "read_only",
@@ -104,8 +124,15 @@ def persist_simulation_branch(destination: Path, branch: Mapping[str, object]) -
         {"starting_situation": branch.get("anchor", "")},
         _require_text(branch.get("mode"), "mode"),
         _require_text(branch.get("anchor"), "anchor"),
+        _require_text(branch.get("source_type"), "source_type"),
     )
-    for field in ("relative_position", "time_direction", "main_campaign_access", "boundary_behavior"):
+    for field in (
+        "source_policy",
+        "relative_position",
+        "time_direction",
+        "main_campaign_access",
+        "boundary_behavior",
+    ):
         if branch.get(field) != validated[field]:
             raise ValueError(f"simulation branch {field} is invalid")
     _write_json_atomically(destination, validated)
