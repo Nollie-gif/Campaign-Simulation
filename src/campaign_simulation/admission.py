@@ -4,21 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 
 MAIN_CAMPAIGN_MANIFEST = "main-campaign-manifest.json"
-REQUIRED_COVERAGE_AREAS = (
-    "campaign_context",
-    "world_state",
-    "participants",
-    "timeline",
-    "knowledge_boundaries",
-    "open_threads",
-)
-VALID_COVERAGE_STATUSES = {"complete", "not_applicable"}
-
-
 class MainCampaignAdmissionError(ValueError):
     """Raised when a sequel would start without an adequate campaign foundation."""
 
@@ -29,36 +18,38 @@ def _require_non_empty_string(value: object, field: str) -> str:
     return value
 
 
-def validate_main_campaign_manifest(manifest: Mapping[str, object]) -> None:
-    """Validate the evidence required before a sequel runtime may be initialized."""
-    if manifest.get("repository_role") != "main-campaign":
-        raise MainCampaignAdmissionError("manifest repository_role must be main-campaign")
-    _require_non_empty_string(manifest.get("campaign_id"), "campaign_id")
-    _require_non_empty_string(manifest.get("source_revision"), "source_revision")
+def validate_main_campaign_manifest(manifest: Mapping[str, object]) -> list[str]:
+    """Validate only the minimum information required to begin play.
 
-    readiness = manifest.get("readiness")
-    if not isinstance(readiness, Mapping) or readiness.get("status") != "ready":
-        raise MainCampaignAdmissionError("main campaign readiness.status must be ready")
+    Supporting characters, locations, organizations, items, relationships,
+    timeline records, and knowledge boundaries are deliberately optional.
+    """
+    _require_non_empty_string(manifest.get("campaign_history"), "campaign_history")
+    _require_non_empty_string(manifest.get("starting_situation"), "starting_situation")
 
-    coverage = manifest.get("information_coverage")
-    if not isinstance(coverage, Mapping):
-        raise MainCampaignAdmissionError("main campaign manifest requires information_coverage")
+    references = manifest.get("character_profile_references")
+    if not isinstance(references, list) or not references:
+        raise MainCampaignAdmissionError(
+            "main campaign manifest requires at least one character profile reference"
+        )
+    if not all(isinstance(reference, str) and reference.strip() for reference in references):
+        raise MainCampaignAdmissionError("character profile references must be non-empty strings")
+    return references
 
-    for area in REQUIRED_COVERAGE_AREAS:
-        evidence = coverage.get(area)
-        if not isinstance(evidence, Mapping):
-            raise MainCampaignAdmissionError(f"missing information coverage for {area}")
-        if evidence.get("status") not in VALID_COVERAGE_STATUSES:
-            raise MainCampaignAdmissionError(
-                f"information coverage for {area} must be complete or not_applicable"
-            )
-        record_ids = evidence.get("evidence_record_ids")
-        if not isinstance(record_ids, list) or not record_ids or not all(
-            isinstance(record_id, str) and record_id.strip() for record_id in record_ids
-        ):
-            raise MainCampaignAdmissionError(
-                f"information coverage for {area} requires at least one evidence record id"
-            )
+
+def _load_usable_character_profile(main_campaign_root: Path, reference: str) -> dict[str, Any]:
+    profile_path = main_campaign_root / reference
+    if not profile_path.is_file():
+        raise MainCampaignAdmissionError(f"character profile is missing: {reference}")
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise MainCampaignAdmissionError(f"character profile is not valid JSON: {reference}") from error
+    if not isinstance(profile, dict):
+        raise MainCampaignAdmissionError(f"character profile must be an object: {reference}")
+    _require_non_empty_string(profile.get("character_name"), "character_name")
+    _require_non_empty_string(profile.get("character_summary"), "character_summary")
+    return profile
 
 
 def admit_main_campaign(main_campaign_root: Path) -> dict[str, object]:
@@ -74,5 +65,7 @@ def admit_main_campaign(main_campaign_root: Path) -> dict[str, object]:
         raise MainCampaignAdmissionError("main campaign manifest is not valid JSON") from error
     if not isinstance(manifest, dict):
         raise MainCampaignAdmissionError("main campaign manifest must be an object")
-    validate_main_campaign_manifest(manifest)
+    references = validate_main_campaign_manifest(manifest)
+    for reference in references:
+        _load_usable_character_profile(main_campaign_root, reference)
     return manifest
