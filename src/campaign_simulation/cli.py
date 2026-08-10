@@ -1,4 +1,4 @@
-"""Guided command-line entry point for a campaign simulation sequel."""
+"""Guided command-line entry point for branch-neutral campaign simulation."""
 
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ from typing import Sequence
 
 from .admission import MainCampaignAdmissionError, admit_main_campaign
 from .boundaries import CampaignBoundaryError
+from .branches import PREQUEL_MODE, SEQUEL_MODE, SIMULATION_MODES, resolve_simulation_branch
 from .convergence import begin_prequel_main_convergence, resolve_prequel_main_convergence
 from .onboarding import CONTINUE_WITHOUT_OPTIONAL_MATERIAL
-from .runtime import begin_sequel_onboarding, complete_sequel_onboarding
+from .runtime import begin_simulation_onboarding, complete_simulation_onboarding
 from .saves import load_checkpoint
 
 
@@ -42,30 +43,73 @@ def _storage_input(args: argparse.Namespace):
         if responses:
             return responses.pop(0)
         if args.non_interactive:
-            raise RuntimeError("non-interactive start needs --storage supabase details or repository mode")
+            raise RuntimeError("non-interactive start needs complete storage arguments or repository mode")
         return input(prompt)
 
     return read
 
 
-def _show_optional_material_menu(menu: dict[str, object]) -> None:
-    """Display every non-blocking extension before asking for a selection."""
-
+def _show_menu(menu: dict[str, object]) -> None:
     print(menu["message"])
     for option in menu["options"]:
-        print(f"- {option['id']}: {option['label']}")
+        line = f"- {option['id']}: {option['label']}"
+        description = option.get("description")
+        if description:
+            line += f" — {description}"
+        print(line)
+
+
+def _choose_mode(args: argparse.Namespace) -> str:
+    if args.mode is not None:
+        return args.mode
+    if args.non_interactive:
+        raise RuntimeError("non-interactive start requires --mode prequel or sequel")
+
+    while True:
+        answer = input("What would you like to explore? [prequel/sequel]: ").strip().lower()
+        shortcuts = {"p": PREQUEL_MODE, "s": SEQUEL_MODE}
+        answer = shortcuts.get(answer, answer)
+        if answer in SIMULATION_MODES:
+            return answer
+        print("Please choose 'prequel' to explore the past or 'sequel' to explore the future.")
+
+
+def _choose_anchor(args: argparse.Namespace, mode: str) -> str | None:
+    if args.anchor is not None:
+        return args.anchor
+    if args.non_interactive:
+        if mode == PREQUEL_MODE:
+            raise RuntimeError("non-interactive prequel start requires --anchor")
+        return None
+
+    if mode == PREQUEL_MODE:
+        while True:
+            answer = input("Where in the past should the prequel begin? ").strip()
+            if answer:
+                return answer
+            print("A prequel needs a short historical anchor. One sentence is enough.")
+
+    answer = input(
+        "Sequel start point (press Enter to use the Main Campaign's current situation): "
+    ).strip()
+    return answer or None
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="campaign-simulation")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
-    validate = subcommands.add_parser("validate-main", help="validate the minimum main campaign")
+    validate = subcommands.add_parser("validate-main", help="validate the minimum Main Campaign")
     validate.add_argument("--main-campaign", required=True, type=Path)
 
-    start = subcommands.add_parser("start", help="run guided sequel onboarding")
+    start = subcommands.add_parser("start", help="run guided Prequel or Sequel onboarding")
     start.add_argument("--main-campaign", required=True, type=Path)
     start.add_argument("--runtime", required=True, type=Path)
+    start.add_argument("--mode", choices=SIMULATION_MODES)
+    start.add_argument(
+        "--anchor",
+        help="branch start point; required for Prequel, optional for Sequel",
+    )
     start.add_argument(
         "--optional",
         help="comma-separated optional material IDs; use none or leave empty to continue directly",
@@ -76,12 +120,15 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--non-interactive", action="store_true")
 
     converge = subcommands.add_parser(
-        "converge-prequel", help="freeze a prequel at its Main Campaign convergence boundary"
+        "converge-prequel", help="freeze a Prequel at its Main Campaign convergence boundary"
     )
     converge.add_argument("--main-campaign", required=True, type=Path)
     converge.add_argument("--prequel-checkpoint", required=True, type=Path)
     converge.add_argument("--main-target", required=True)
-    converge.add_argument("--choice", choices=("enter_main_unchanged", "propose_canon_changes", "continue_as_alternate_timeline"))
+    converge.add_argument(
+        "--choice",
+        choices=("enter_main_unchanged", "propose_canon_changes", "continue_as_alternate_timeline"),
+    )
     converge.add_argument("--proposal-json", default="[]")
     return parser
 
@@ -96,8 +143,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "converge-prequel":
-            # Admission makes the chosen Main Campaign explicit; convergence
-            # itself remains read-only and produces a decision record only.
             admit_main_campaign(args.main_campaign)
             convergence = begin_prequel_main_convergence(
                 load_checkpoint(args.prequel_checkpoint), args.main_target
@@ -110,13 +155,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(convergence, indent=2))
             return 0
 
-        onboarding = begin_sequel_onboarding(args.main_campaign)
+        onboarding = begin_simulation_onboarding(args.main_campaign)
         if not args.non_interactive:
-            _show_optional_material_menu(onboarding["optional_material_menu"])
+            _show_menu(onboarding["exploration_menu"])
+        mode = _choose_mode(args)
+        anchor = _choose_anchor(args, mode)
+        branch = resolve_simulation_branch(onboarding["main_campaign"], mode, anchor)
+
+        if not args.non_interactive:
+            _show_menu(onboarding["optional_material_menu"])
         selected_optional_material = _parse_optional_selection(args.optional, args.non_interactive)
-        result = complete_sequel_onboarding(
+
+        result = complete_simulation_onboarding(
             args.main_campaign,
-            args.runtime / "storage-configuration.json",
+            args.runtime,
+            branch,
             selected_optional_material,
             input_fn=_storage_input(args),
         )
@@ -128,7 +181,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(
             {
                 "status": "started",
-                "optional_material_menu": onboarding["optional_material_menu"],
+                "simulation_mode": result["branch"]["mode"],
+                "branch": result["branch"],
                 "selected_optional_material": result["optional_material"],
                 "storage": result["storage"],
             },
