@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simulation Bootstrap Request",
+  "type": "object",
+  "required": [
+    "main_campaign_repository",
+    "main_campaign_revision",
+    "admission_status",
+    "simulation_mode",
+    "anchor",
+    "relative_position",
+    "requested_at"
+  ],
+  "properties": {
+    "main_campaign_repository": {"type": "string", "minLength": 1},
+    "main_campaign_revision": {"type": "string", "minLength": 1},
+    "admission_status": {"type": "string", "minLength": 1},
+    "simulation_mode": {"enum": ["prequel", "sequel"]},
+    "anchor": {"type": "string", "minLength": 1},
+    "relative_position": {"enum": ["before_main_campaign", "after_main_campaign"]},
+    "requested_at": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}
