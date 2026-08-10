@@ -64,6 +64,7 @@ Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be w
 - forward-anchor Sequel bootstrap
 - scenario lifecycle contract
 - hook lifecycle contract
+- deferred-event lifecycle contract
 - quick-save and final-save contract
 - first-boot storage selection with repository fallback
 - command-line guided startup (`campaign-simulation start`)
@@ -71,11 +72,21 @@ Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be w
 - Minimum Playable Campaign Gate
 - optional campaign-material onboarding
 - path-safe Main Campaign references
-- persisted hook and scenario identifier allocation
+- persisted hook, scenario, and deferred-event identifier allocation
 - atomic full-checkpoint persistence
 - credential-safe Supabase validation and repository fallback
 - hard read-only Main Campaign write boundary
 - explicit Prequel → Main Convergence Gate with no automatic merge
+- deterministic Campaign Clock with conservative broad phases and monotonic elapsed in-world duration
+- side-effect-free automatic autosave policy
+- deterministic Deferred Event Scheduler with replay-safe pending events and idempotent creation
+- engine-owned checkpoint validation for Campaign Clock, Autosave, and Scheduler state
+
+Time and deferred-event contracts:
+
+- [Campaign Time](docs/CAMPAIGN_TIME.md)
+- [Automatic Autosave](docs/AUTOSAVE.md)
+- [Deferred Event Scheduler](docs/DEFERRED_EVENT_SCHEDULER.md)
 
 ## Platform compatibility
 
