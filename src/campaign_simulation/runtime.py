@@ -3,22 +3,37 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from .admission import admit_main_campaign
 from .bootstrap import resolve_storage_mode
+from .onboarding import build_optional_material_menu, continue_from_optional_material
 
 
-def initialize_sequel_runtime(
+def begin_sequel_onboarding(main_campaign_root: Path) -> dict[str, Any]:
+    """Admit the campaign, then show capabilities before storage setup."""
+    manifest = admit_main_campaign(main_campaign_root)
+    return {
+        "main_campaign": manifest,
+        "status": "choose_optional_material",
+        "optional_material_menu": build_optional_material_menu(),
+        "storage": None,
+    }
+
+
+def complete_sequel_onboarding(
     main_campaign_root: Path,
     storage_config_path: Path,
+    selected_optional_material: list[str],
     input_fn=input,
     external_probe=None,
 ) -> dict[str, object]:
-    """Admit the source campaign before creating any sequel runtime state.
+    """Complete storage setup after the optional-material choice.
 
-    Storage selection is intentionally second: a blocked sequel must not create
-    a configuration file, prompt for Supabase, or write any simulation data.
+    A blocked campaign therefore cannot create a configuration file or prompt
+    for Supabase. An admitted campaign may continue with an empty selection.
     """
     manifest = admit_main_campaign(main_campaign_root)
+    optional_material = continue_from_optional_material(selected_optional_material)
     storage = resolve_storage_mode(storage_config_path, input_fn, external_probe)
-    return {"main_campaign": manifest, "storage": storage}
+    return {"main_campaign": manifest, "optional_material": optional_material, "storage": storage}
