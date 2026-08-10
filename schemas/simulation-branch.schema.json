@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simulation Branch",
+  "type": "object",
+  "required": [
+    "mode",
+    "anchor",
+    "relative_position",
+    "time_direction",
+    "main_campaign_access",
+    "boundary_behavior"
+  ],
+  "properties": {
+    "mode": {"enum": ["prequel", "sequel"]},
+    "anchor": {"type": "string", "minLength": 1},
+    "relative_position": {"enum": ["before_main_campaign", "after_main_campaign"]},
+    "time_direction": {"const": "forward"},
+    "main_campaign_access": {"const": "read_only"},
+    "boundary_behavior": {"enum": ["freeze_at_main_convergence_gate", "continue_forward"]}
+  },
+  "additionalProperties": false
+}
