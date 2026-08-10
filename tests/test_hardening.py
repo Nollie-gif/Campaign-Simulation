@@ -10,7 +10,15 @@ from unittest.mock import patch
 from campaign_simulation.admission import MainCampaignAdmissionError, admit_main_campaign
 from campaign_simulation.bootstrap import REPOSITORY_MODE, SUPABASE_MODE, probe_supabase, resolve_storage_mode
 from campaign_simulation.cli import main as cli_main
+from campaign_simulation.convergence import (
+    CONTINUE_ALTERNATE_TIMELINE,
+    ENTER_MAIN_UNCHANGED,
+    PROPOSE_CANON_CHANGES,
+    begin_prequel_main_convergence,
+    resolve_prequel_main_convergence,
+)
 from campaign_simulation.lifecycles import allocate_persistent_identifier
+from campaign_simulation.runtime import complete_sequel_onboarding
 from campaign_simulation.saves import commit_checkpoint, commit_manifest, load_checkpoint, validate_prepared_manifest
 
 
@@ -63,6 +71,26 @@ class AdmissionBoundaryTests(unittest.TestCase):
             _write_minimum_campaign(campaign, str((campaign / "characters" / "player.json").resolve()))
             with self.assertRaisesRegex(MainCampaignAdmissionError, "must be relative"):
                 admit_main_campaign(campaign)
+
+    def test_runtime_path_inside_main_campaign_is_refused_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            campaign = root / "main-campaign"
+            _write_minimum_campaign(campaign)
+            config = campaign / "runtime" / "storage-configuration.json"
+            with self.assertRaisesRegex(ValueError, "overlaps the read-only main campaign"):
+                complete_sequel_onboarding(campaign, config, ["continue_without_adding_material"])
+            self.assertFalse(config.exists())
+
+    def test_runtime_path_above_main_campaign_is_refused_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            campaign = root / "main-campaign"
+            _write_minimum_campaign(campaign)
+            config = root / "storage-configuration.json"
+            with self.assertRaisesRegex(ValueError, "ancestor of the read-only main campaign"):
+                complete_sequel_onboarding(campaign, config, ["continue_without_adding_material"])
+            self.assertFalse(config.exists())
 
 
 class IdentifierPersistenceTests(unittest.TestCase):
@@ -239,6 +267,42 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("supporting_character", stdout.getvalue())
             self.assertIn("Continue without adding material", stdout.getvalue())
+
+
+class PrequelConvergenceTests(unittest.TestCase):
+    def test_convergence_freezes_prequel_and_never_authorizes_main_writes(self) -> None:
+        manifest = _validated_manifest()
+        manifest["status"] = "committed"
+        checkpoint = {
+            "manifest": manifest,
+            "records": {"record-000001": {"revision": "rev-000001", "data": {}}},
+        }
+        gate = begin_prequel_main_convergence(checkpoint, "main-scene-000001")
+        self.assertEqual(gate["prequel_status"], "frozen_at_main_boundary")
+        self.assertEqual(gate["main_campaign_write_authorization"], "never_automatic")
+        self.assertEqual(
+            gate["allowed_choices"],
+            [ENTER_MAIN_UNCHANGED, PROPOSE_CANON_CHANGES, CONTINUE_ALTERNATE_TIMELINE],
+        )
+
+    def test_each_explicit_convergence_choice_preserves_main_write_boundary(self) -> None:
+        manifest = _validated_manifest()
+        manifest["status"] = "committed"
+        checkpoint = {
+            "manifest": manifest,
+            "records": {"record-000001": {"revision": "rev-000001", "data": {}}},
+        }
+        gate = begin_prequel_main_convergence(checkpoint, "main-scene-000001")
+        unchanged = resolve_prequel_main_convergence(gate, ENTER_MAIN_UNCHANGED)
+        proposal = resolve_prequel_main_convergence(
+            gate, PROPOSE_CANON_CHANGES, [{"record_id": "candidate-000001"}]
+        )
+        alternate = resolve_prequel_main_convergence(gate, CONTINUE_ALTERNATE_TIMELINE)
+        self.assertEqual(unchanged["status"], "main_entered_unchanged")
+        self.assertEqual(proposal["status"], "canon_change_review_required")
+        self.assertEqual(alternate["status"], "alternate_timeline_continues")
+        for result in (unchanged, proposal, alternate):
+            self.assertEqual(result["main_campaign_write_authorization"], "never_automatic")
 
 
 if __name__ == "__main__":
