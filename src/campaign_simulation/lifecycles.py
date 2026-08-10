@@ -76,7 +76,7 @@ def _write_json_atomically(destination: Path, value: Mapping[str, Any]) -> None:
 def allocate_persistent_identifier(session_state_path: Path, kind: str) -> str:
     """Allocate and durably persist a unique hook or scenario identifier.
 
-    The counter is owned by the sequel session state, rather than by a caller's
+    The counter is owned by the simulation session state, rather than by a caller's
     in-memory variable. This prevents an ordinary restart from recycling IDs.
     """
 
