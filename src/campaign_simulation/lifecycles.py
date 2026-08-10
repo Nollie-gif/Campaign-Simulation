@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
-import time
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Mapping
 
+from ._atomic import write_json_atomically
+from .lock import advisory_lock, LockAcquireTimeout
 
 SCENARIO_TRANSITIONS = {
     "draft": {"available"},
@@ -45,64 +44,51 @@ def allocate_identifier(prefix: str, next_value: int) -> tuple[str, int]:
     return f"{prefix}-{next_value:06d}", next_value + 1
 
 
-@contextmanager
-def _session_state_lock(session_state_path: Path, timeout_seconds: float = 2.0) -> Iterator[None]:
-    """Serialize cross-process identifier allocation for one session-state file."""
-
-    session_state_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = session_state_path.with_name(f"{session_state_path.name}.lock")
-    deadline = time.monotonic() + timeout_seconds
-    descriptor: int | None = None
-    while descriptor is None:
-        try:
-            descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"session identifier allocator is locked: {session_state_path}")
-            time.sleep(0.01)
-    try:
-        yield
-    finally:
-        os.close(descriptor)
-        lock_path.unlink(missing_ok=True)
-
-
-def _write_json_atomically(destination: Path, value: Mapping[str, Any]) -> None:
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
-    os.replace(temporary, destination)
-
-
-def allocate_persistent_identifier(session_state_path: Path, kind: str) -> str:
+def allocate_persistent_identifier(session_state_path: Path, kind: str, lock_timeout: float = 2.0) -> str:
     """Allocate and durably persist a unique hook or scenario identifier.
 
     The counter is owned by the simulation session state, rather than by a caller's
     in-memory variable. This prevents an ordinary restart from recycling IDs.
+
+    This function uses an advisory file lock to serialize cross-process access.
+    The lock file is persistent and ownership is represented only by the OS-level
+    advisory lock held on an open file descriptor; the lock file is not created
+    or removed to represent ownership.
     """
 
     if kind not in PERSISTED_IDENTIFIER_KINDS:
         raise ValueError(f"unsupported persisted identifier kind: {kind}")
 
-    with _session_state_lock(session_state_path):
-        if session_state_path.exists():
-            try:
-                state = json.loads(session_state_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as error:
-                raise ValueError("session state is not valid JSON") from error
-            if not isinstance(state, dict):
-                raise ValueError("session state must be a JSON object")
-        else:
-            state = {}
+    lock_path = session_state_path.with_name(f"{session_state_path.name}.lock")
 
-        counters = state.get("identifier_counters", {})
-        if not isinstance(counters, dict):
-            raise ValueError("session identifier_counters must be an object")
-        next_value = counters.get(kind, 1)
-        if isinstance(next_value, bool) or not isinstance(next_value, int) or next_value < 1:
-            raise ValueError(f"session counter for {kind} must be a positive integer")
+    # Acquire advisory lock for the duration of state mutation.
+    try:
+        with advisory_lock(lock_path, timeout_seconds=lock_timeout):
+            # Load existing session state
+            if session_state_path.exists():
+                try:
+                    state = json.loads(session_state_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as error:
+                    raise ValueError("session state is not valid JSON") from error
+                if not isinstance(state, dict):
+                    raise ValueError("session state must be a JSON object")
+            else:
+                state = {}
 
-        identifier, next_value = allocate_identifier(PERSISTED_IDENTIFIER_KINDS[kind], next_value)
-        counters[kind] = next_value
-        state["identifier_counters"] = counters
-        _write_json_atomically(session_state_path, state)
-        return identifier
+            counters = state.get("identifier_counters", {})
+            if not isinstance(counters, dict):
+                raise ValueError("session identifier_counters must be an object")
+            next_value = counters.get(kind, 1)
+            if isinstance(next_value, bool) or not isinstance(next_value, int) or next_value < 1:
+                raise ValueError(f"session counter for {kind} must be a positive integer")
+
+            identifier, next_value = allocate_identifier(PERSISTED_IDENTIFIER_KINDS[kind], next_value)
+            counters[kind] = next_value
+            state["identifier_counters"] = counters
+
+            # Atomically write the updated state; fsync parent directory for durability.
+            write_json_atomically(session_state_path, state, fsync_parent=True)
+            return identifier
+    except LockAcquireTimeout as error:
+        # Surface a clear runtime error if we couldn't acquire the lock in time.
+        raise RuntimeError(f"session identifier allocator is locked: {session_state_path}") from error
