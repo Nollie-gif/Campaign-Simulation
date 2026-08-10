@@ -36,9 +36,17 @@ The optional-material menu is informational and never blocks play.
 
 Both Prequel and Sequel simulations move **forward in time**.
 
-A Prequel does not reverse time. It starts from a user-selected historical anchor and advances toward the known Main Campaign. When it reaches the Main Campaign boundary, the existing convergence gate freezes the branch and asks the user what to do next.
+A Prequel does not reverse time. It starts from a user-selected historical anchor and advances toward the known Main Campaign. When it reaches the Main Campaign boundary, the convergence gate freezes the branch and asks the user what to do next.
 
-A Sequel starts from the Main Campaign's current situation by default, or from another forward anchor supplied by the user.
+A Sequel starts from the accepted Main Campaign state. **A Prequel checkpoint can never be used directly as a Sequel source.** If a Prequel changes history, its save data may be used as review input to establish or update the Main Campaign. Only after the user explicitly accepts that Main Campaign state may a Sequel begin from it.
+
+The supported handoff is therefore:
+
+**Prequel save → Main Campaign review/acceptance → Sequel**
+
+Never:
+
+**Prequel save → Sequel**
 
 See [Branching](docs/BRANCHING.md) for the complete contract.
 
@@ -51,6 +59,7 @@ Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be w
 ## Included mechanics
 
 - branch-neutral Prequel / Sequel onboarding
+- hard Main-Campaign-only source policy for every simulation branch
 - historical-anchor Prequel bootstrap
 - forward-anchor Sequel bootstrap
 - scenario lifecycle contract
