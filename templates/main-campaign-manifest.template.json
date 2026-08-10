@@ -1,34 +1,6 @@
 {
-  "repository_role": "",
-  "campaign_id": "",
-  "source_revision": "",
-  "readiness": {
-    "status": ""
-  },
-  "information_coverage": {
-    "campaign_context": {
-      "status": "",
-      "evidence_record_ids": []
-    },
-    "world_state": {
-      "status": "",
-      "evidence_record_ids": []
-    },
-    "participants": {
-      "status": "",
-      "evidence_record_ids": []
-    },
-    "timeline": {
-      "status": "",
-      "evidence_record_ids": []
-    },
-    "knowledge_boundaries": {
-      "status": "",
-      "evidence_record_ids": []
-    },
-    "open_threads": {
-      "status": "",
-      "evidence_record_ids": []
-    }
-  }
+  "campaign_history": "",
+  "starting_situation": "",
+  "character_profile_references": [],
+  "optional_material_references": []
 }
