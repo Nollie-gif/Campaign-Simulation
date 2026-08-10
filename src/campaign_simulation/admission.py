@@ -1,4 +1,4 @@
-"""Admission control for starting a sequel simulation from a main campaign."""
+"""Admission control for starting a simulation from a protected Main Campaign."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ MAIN_CAMPAIGN_MANIFEST = "main-campaign-manifest.json"
 
 
 class MainCampaignAdmissionError(ValueError):
-    """Raised when a sequel would start without an adequate campaign foundation."""
+    """Raised when a simulation would start without an adequate campaign foundation."""
 
 
 def _require_non_empty_string(value: object, field: str) -> str:
@@ -69,15 +69,15 @@ def _load_usable_character_profile(main_campaign_root: Path, reference: str) -> 
 
 
 def admit_main_campaign(main_campaign_root: Path) -> dict[str, object]:
-    """Load and validate a main-campaign manifest before any sequel action occurs."""
+    """Load and validate the Main Campaign before any simulation action occurs."""
     resolved_root = main_campaign_root.resolve()
     if not resolved_root.is_dir():
-        raise MainCampaignAdmissionError("sequel simulation is blocked: main campaign directory is missing")
+        raise MainCampaignAdmissionError("simulation is blocked: main campaign directory is missing")
 
     manifest_path = resolved_root / MAIN_CAMPAIGN_MANIFEST
     if not manifest_path.is_file():
         raise MainCampaignAdmissionError(
-            "sequel simulation is blocked: main-campaign-manifest.json is missing"
+            "simulation is blocked: main-campaign-manifest.json is missing"
         )
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
