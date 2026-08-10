@@ -7,3 +7,5 @@
 5. Missing templates are design gaps, not invitations to add an ad-hoc field.
 6. Runtime configuration is local and ignored by version control.
 7. An optional external knowledge layer may accelerate reads but must never be the only recoverable source of truth.
+8. A sequel runtime may start only after a separate main-campaign repository passes the admission gate.
+9. The admission gate is evaluated before storage selection, save creation, hook allocation, or scenario activation.
