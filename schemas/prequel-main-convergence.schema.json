@@ -9,6 +9,8 @@
     "main_campaign_target",
     "allowed_choices",
     "main_campaign_write_authorization",
+    "sequel_source_policy",
+    "prequel_checkpoint_role",
     "selected_choice",
     "canon_change_proposal"
   ],
@@ -19,6 +21,8 @@
     "main_campaign_target": {"type": "string", "minLength": 1},
     "allowed_choices": {"type": "array", "minItems": 3, "items": {"type": "string"}},
     "main_campaign_write_authorization": {"const": "never_automatic"},
+    "sequel_source_policy": {"const": "main_campaign_only"},
+    "prequel_checkpoint_role": {"const": "review_input_only"},
     "selected_choice": {"type": "string"},
     "canon_change_proposal": {"type": "array", "items": {"type": "object"}}
   },
