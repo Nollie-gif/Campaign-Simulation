@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from campaign_simulation.admission import MainCampaignAdmissionError, admit_main_campaign
 from campaign_simulation.bootstrap import REPOSITORY_MODE, SUPABASE_MODE, probe_supabase, resolve_storage_mode
+from campaign_simulation.branches import PREQUEL_MODE, SEQUEL_MODE, resolve_simulation_branch
 from campaign_simulation.cli import main as cli_main
 from campaign_simulation.convergence import (
     CONTINUE_ALTERNATE_TIMELINE,
@@ -91,6 +92,23 @@ class AdmissionBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ancestor of the read-only main campaign"):
                 complete_sequel_onboarding(campaign, config, ["continue_without_adding_material"])
             self.assertFalse(config.exists())
+
+
+class BranchTests(unittest.TestCase):
+    def test_prequel_requires_historical_anchor_and_still_moves_forward(self) -> None:
+        manifest = {"starting_situation": "Current situation."}
+        with self.assertRaisesRegex(ValueError, "historical anchor"):
+            resolve_simulation_branch(manifest, PREQUEL_MODE)
+        branch = resolve_simulation_branch(manifest, PREQUEL_MODE, "A point in the past.")
+        self.assertEqual(branch["relative_position"], "before_main_campaign")
+        self.assertEqual(branch["time_direction"], "forward")
+        self.assertEqual(branch["boundary_behavior"], "freeze_at_main_convergence_gate")
+
+    def test_sequel_defaults_to_main_campaign_current_situation(self) -> None:
+        branch = resolve_simulation_branch({"starting_situation": "Current situation."}, SEQUEL_MODE)
+        self.assertEqual(branch["anchor"], "Current situation.")
+        self.assertEqual(branch["relative_position"], "after_main_campaign")
+        self.assertEqual(branch["time_direction"], "forward")
 
 
 class IdentifierPersistenceTests(unittest.TestCase):
@@ -225,7 +243,27 @@ class StorageHardeningTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
-    def test_non_interactive_start_command_creates_a_repository_runtime(self) -> None:
+    def test_non_interactive_requires_explicit_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            campaign = root / "main-campaign"
+            _write_minimum_campaign(campaign)
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                result = cli_main(
+                    [
+                        "start",
+                        "--main-campaign",
+                        str(campaign),
+                        "--runtime",
+                        str(root / "runtime"),
+                        "--non-interactive",
+                    ]
+                )
+            self.assertEqual(result, 2)
+            self.assertIn("requires --mode", stderr.getvalue())
+
+    def test_non_interactive_sequel_creates_branch_and_repository_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             campaign = root / "main-campaign"
@@ -240,19 +278,45 @@ class CliTests(unittest.TestCase):
                         str(campaign),
                         "--runtime",
                         str(root / "runtime"),
+                        "--mode",
+                        "sequel",
                         "--non-interactive",
                     ]
                 )
             self.assertEqual(result, 0, stderr.getvalue())
-            self.assertIn('"status": "started"', stdout.getvalue())
+            self.assertIn('"simulation_mode": "sequel"', stdout.getvalue())
             self.assertTrue((root / "runtime" / "storage-configuration.json").is_file())
+            branch = json.loads((root / "runtime" / "simulation-branch.json").read_text(encoding="utf-8"))
+            self.assertEqual(branch["anchor"], "A current situation.")
 
-    def test_interactive_start_shows_optional_capabilities_before_prompting(self) -> None:
+    def test_non_interactive_prequel_requires_anchor(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             campaign = root / "main-campaign"
             _write_minimum_campaign(campaign)
-            responses = iter(["", "repository"])
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                result = cli_main(
+                    [
+                        "start",
+                        "--main-campaign",
+                        str(campaign),
+                        "--runtime",
+                        str(root / "runtime"),
+                        "--mode",
+                        "prequel",
+                        "--non-interactive",
+                    ]
+                )
+            self.assertEqual(result, 2)
+            self.assertIn("requires --anchor", stderr.getvalue())
+
+    def test_interactive_start_shows_branch_and_optional_capabilities(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            campaign = root / "main-campaign"
+            _write_minimum_campaign(campaign)
+            responses = iter(["sequel", "", "", "repository"])
             stdout = io.StringIO()
             with patch("builtins.input", side_effect=lambda _: next(responses)), redirect_stdout(stdout):
                 result = cli_main(
@@ -265,6 +329,8 @@ class CliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(result, 0)
+            self.assertIn("Explore the past", stdout.getvalue())
+            self.assertIn("Explore the future", stdout.getvalue())
             self.assertIn("supporting_character", stdout.getvalue())
             self.assertIn("Continue without adding material", stdout.getvalue())
 
