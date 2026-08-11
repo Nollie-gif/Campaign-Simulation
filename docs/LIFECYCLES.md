@@ -22,6 +22,8 @@ Quick saves are lightweight recovery points. Final saves are durable end-state c
 
 A save is committed only from `validated`. A complete checkpoint persists the committed manifest and the snapshots of every declared record together in one atomic file. Blank IDs, invalid timestamps, empty revision lists, mismatched record revisions, and direct `prepared -> committed` writes are refused.
 
+Every new checkpoint also requires a declared Mutation Gate plan. The plan must cover every checkpoint record, stay inside the procedure's allowed domains, satisfy coupled postconditions, and pass lifecycle validation before the atomic write. See [Mutation and Lifecycle Gates](MUTATION_GATES.md).
+
 ## Prequel → Main convergence
 
 When a Prequel reaches the declared scene where the Main Campaign begins or converges, it enters `frozen_at_main_boundary`. The engine creates an explicit decision state and **does not write to Main Campaign**. The user then chooses one of exactly three paths:

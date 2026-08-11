@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from .mutation_gates import MutationPlan, plan_to_mapping, validate_mutation_plan
+
 
 REQUIRED_MANIFEST_FIELDS = {"id", "kind", "status", "created_at", "record_revisions"}
 
@@ -144,17 +146,33 @@ def validate_checkpoint(
         raise ValueError("checkpoint records do not match the declared record revisions")
 
 
+def validate_gated_checkpoint(
+    manifest: Mapping[str, object],
+    records: Mapping[str, Mapping[str, object]],
+    gate_plan: MutationPlan,
+) -> None:
+    """Validate the checkpoint plus its declared procedure-level mutation plan."""
+
+    validate_checkpoint(manifest, records)
+    validate_mutation_plan(gate_plan, record_ids=records)
+
+
 def commit_checkpoint(
     destination: Path,
     manifest: Mapping[str, object],
     records: Mapping[str, Mapping[str, object]],
+    *,
+    gate_plan: MutationPlan | None = None,
 ) -> dict[str, object]:
-    """Atomically persist a durable, multi-record save checkpoint."""
+    """Atomically persist a durable, multi-record, procedure-gated checkpoint."""
 
-    validate_checkpoint(manifest, records)
+    if gate_plan is None:
+        raise ValueError("procedure gate plan is required before a checkpoint may commit")
+    validate_gated_checkpoint(manifest, records, gate_plan)
     checkpoint: dict[str, object] = {
         "manifest": _require_commit_ready_manifest(manifest),
         "records": dict(records),
+        "mutation_gate": plan_to_mapping(gate_plan),
     }
     _write_json_atomically(destination, checkpoint)
     return checkpoint
@@ -173,6 +191,9 @@ def load_checkpoint(source: Path) -> dict[str, object]:
     records = checkpoint.get("records")
     if not isinstance(manifest, Mapping) or not isinstance(records, Mapping):
         raise ValueError("checkpoint requires manifest and records objects")
+    mutation_gate = checkpoint.get("mutation_gate")
+    if mutation_gate is not None and not isinstance(mutation_gate, Mapping):
+        raise ValueError("checkpoint mutation_gate must be an object when present")
     validate_checkpoint(manifest, records)
     if manifest["status"] != "committed":
         raise ValueError("checkpoint manifest must be committed")

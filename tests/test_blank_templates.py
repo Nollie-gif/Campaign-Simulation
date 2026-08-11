@@ -11,9 +11,27 @@ from campaign_simulation.admission import MainCampaignAdmissionError, admit_main
 from campaign_simulation.lifecycles import HOOK_TRANSITIONS, allocate_identifier, transition
 from campaign_simulation.runtime import begin_sequel_onboarding, complete_sequel_onboarding
 from campaign_simulation.saves import commit_checkpoint
+from campaign_simulation.mutation_gates import MutationDomain, MutationOperation, MutationPlan, Procedure
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _final_save_gate_plan() -> MutationPlan:
+    return MutationPlan(
+        procedure=Procedure.FINAL_SAVE,
+        operations=(MutationOperation(MutationDomain.RUNTIME_STATE, "record-000001"),),
+        facts=frozenset(
+            {
+                "reconciled",
+                "validated",
+                "same_checkpoint",
+                "day_finalized",
+                "live_indexes_reconciled",
+            }
+        ),
+        branch="repository-checkpoint",
+    )
 
 
 class FoundationTests(unittest.TestCase):
@@ -62,6 +80,7 @@ class FoundationTests(unittest.TestCase):
                     "record_revisions": [{"record_id": "record-000001", "revision": "rev-000001"}],
                 },
                 {"record-000001": {"revision": "rev-000001", "data": {}}},
+                gate_plan=_final_save_gate_plan(),
             )
             self.assertEqual(
                 json.loads(destination.read_text(encoding="utf-8"))["manifest"]["status"], "committed"
