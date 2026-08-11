@@ -19,6 +19,7 @@ from campaign_simulation.convergence import (
     resolve_prequel_main_convergence,
 )
 from campaign_simulation.lifecycles import allocate_persistent_identifier
+from campaign_simulation.mutation_gates import MutationDomain, MutationOperation, MutationPlan, Procedure
 from campaign_simulation.runtime import complete_sequel_onboarding
 from campaign_simulation.saves import commit_checkpoint, commit_manifest, load_checkpoint, validate_prepared_manifest
 
@@ -51,6 +52,23 @@ def _validated_manifest() -> dict[str, object]:
         "created_at": "2026-08-10T12:00:00Z",
         "record_revisions": [{"record_id": "record-000001", "revision": "rev-000001"}],
     }
+
+
+def _final_save_gate_plan(record_id: str = "record-000001") -> MutationPlan:
+    return MutationPlan(
+        procedure=Procedure.FINAL_SAVE,
+        operations=(MutationOperation(MutationDomain.RUNTIME_STATE, record_id),),
+        facts=frozenset(
+            {
+                "reconciled",
+                "validated",
+                "same_checkpoint",
+                "day_finalized",
+                "live_indexes_reconciled",
+            }
+        ),
+        branch="repository-checkpoint",
+    )
 
 
 class AdmissionBoundaryTests(unittest.TestCase):
@@ -132,7 +150,9 @@ class CheckpointTests(unittest.TestCase):
                 destination,
                 _validated_manifest(),
                 {"record-000001": {"revision": "rev-000001", "data": {"state": "current"}}},
-            )
+            ,
+                    gate_plan=_final_save_gate_plan(),
+                )
             self.assertEqual(checkpoint["manifest"]["status"], "committed")
             loaded = load_checkpoint(destination)
             self.assertEqual(loaded["records"]["record-000001"]["data"]["state"], "current")
@@ -146,6 +166,8 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
+                ,
+                    gate_plan=_final_save_gate_plan(),
                 )
             validated = validate_prepared_manifest(manifest)
             self.assertEqual(validated["status"], "validated")
@@ -164,6 +186,8 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
+                ,
+                    gate_plan=_final_save_gate_plan(),
                 )
             manifest = _validated_manifest()
             manifest["created_at"] = "not-a-timestamp"
@@ -172,6 +196,8 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
+                ,
+                    gate_plan=_final_save_gate_plan(),
                 )
 
     def test_mismatched_record_revision_is_refused(self) -> None:
@@ -181,6 +207,8 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     _validated_manifest(),
                     {"record-000001": {"revision": "wrong", "data": {}}},
+                ,
+                    gate_plan=_final_save_gate_plan(),
                 )
 
 
