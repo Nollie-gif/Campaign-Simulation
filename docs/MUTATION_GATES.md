@@ -1,6 +1,6 @@
 # Mutation and Lifecycle Gates
 
-**Status:** experimental until a consuming adapter has passed its focused integration and fault tests.
+**Status:** active baseline. The first consuming adapter (Mission 10) passed focused integration/fault tests, server-side protection checks, and production migration verification on 2026-08-12.
 
 This module is the framework's procedure-level safety layer. It protects persistence authority; it does not decide story outcomes, create narrative content, or gate ordinary conversation.
 
