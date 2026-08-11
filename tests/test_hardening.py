@@ -150,8 +150,7 @@ class CheckpointTests(unittest.TestCase):
                 destination,
                 _validated_manifest(),
                 {"record-000001": {"revision": "rev-000001", "data": {"state": "current"}}},
-            ,
-                    gate_plan=_final_save_gate_plan(),
+                gate_plan=_final_save_gate_plan(),
                 )
             self.assertEqual(checkpoint["manifest"]["status"], "committed")
             loaded = load_checkpoint(destination)
