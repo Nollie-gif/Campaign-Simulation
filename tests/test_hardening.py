@@ -175,6 +175,18 @@ class CheckpointTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "manifest-only"):
                 commit_manifest(Path(temporary_directory) / "save.json", _validated_manifest())
 
+
+    def test_checkpoint_without_gate_plan_is_refused_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            destination = Path(temporary_directory) / "save.json"
+            with self.assertRaisesRegex(ValueError, "gate plan is required"):
+                commit_checkpoint(
+                    destination,
+                    _validated_manifest(),
+                    {"record-000001": {"revision": "rev-000001", "data": {}}},
+                )
+            self.assertFalse(destination.exists())
+
     def test_blank_id_and_invalid_timestamp_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             manifest = _validated_manifest()
