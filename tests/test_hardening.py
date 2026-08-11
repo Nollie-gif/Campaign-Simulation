@@ -155,6 +155,7 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(checkpoint["manifest"]["status"], "committed")
             loaded = load_checkpoint(destination)
             self.assertEqual(loaded["records"]["record-000001"]["data"]["state"], "current")
+            self.assertEqual(loaded["mutation_gate"]["procedure"], "final_save")
 
     def test_prepared_manifest_cannot_commit_without_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
