@@ -80,7 +80,6 @@ class FoundationTests(unittest.TestCase):
                     "record_revisions": [{"record_id": "record-000001", "revision": "rev-000001"}],
                 },
                 {"record-000001": {"revision": "rev-000001", "data": {}}},
-            ,
                 gate_plan=_final_save_gate_plan(),
             )
             self.assertEqual(
