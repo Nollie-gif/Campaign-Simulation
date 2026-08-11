@@ -166,7 +166,6 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
-                ,
                     gate_plan=_final_save_gate_plan(),
                 )
             validated = validate_prepared_manifest(manifest)
@@ -186,7 +185,6 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
-                ,
                     gate_plan=_final_save_gate_plan(),
                 )
             manifest = _validated_manifest()
@@ -196,7 +194,6 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     manifest,
                     {"record-000001": {"revision": "rev-000001", "data": {}}},
-                ,
                     gate_plan=_final_save_gate_plan(),
                 )
 
@@ -207,7 +204,6 @@ class CheckpointTests(unittest.TestCase):
                     Path(temporary_directory) / "save.json",
                     _validated_manifest(),
                     {"record-000001": {"revision": "wrong", "data": {}}},
-                ,
                     gate_plan=_final_save_gate_plan(),
                 )
 
