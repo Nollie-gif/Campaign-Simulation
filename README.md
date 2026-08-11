@@ -73,6 +73,8 @@ Campaign prose is language-neutral. A Main Campaign, Prequel, or Sequel may be w
 - path-safe Main Campaign references
 - persisted hook and scenario identifier allocation
 - atomic full-checkpoint persistence
+- procedure-aware mutation scope and lifecycle gates
+- mutation-path audit registry for provider adapters
 - credential-safe Supabase validation and repository fallback
 - hard read-only Main Campaign write boundary
 - explicit Prequel → Main Convergence Gate with no automatic merge
