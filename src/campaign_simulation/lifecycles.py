@@ -1,4 +1,4 @@
-"""Generic state transitions for scenario and hook records."""
+"""Generic state transitions for scenario, hook, and deferred-event records."""
 
 from __future__ import annotations
 
@@ -25,7 +25,17 @@ HOOK_TRANSITIONS = {
     "retired": set(),
 }
 
-PERSISTED_IDENTIFIER_KINDS = {"hook": "hook", "scenario": "scenario"}
+EVENT_TRANSITIONS = {
+    "pending": {"resolved", "cancelled"},
+    "resolved": set(),
+    "cancelled": set(),
+}
+
+PERSISTED_IDENTIFIER_KINDS = {
+    "hook": "hook",
+    "scenario": "scenario",
+    "event": "event",
+}
 
 
 def transition(current: str, target: str, transitions: dict[str, set[str]]) -> str:
@@ -45,7 +55,7 @@ def allocate_identifier(prefix: str, next_value: int) -> tuple[str, int]:
 
 
 def allocate_persistent_identifier(session_state_path: Path, kind: str, lock_timeout: float = 2.0) -> str:
-    """Allocate and durably persist a unique hook or scenario identifier.
+    """Allocate and durably persist a unique hook, scenario, or event identifier.
 
     The counter is owned by the simulation session state, rather than by a caller's
     in-memory variable. This prevents an ordinary restart from recycling IDs.
@@ -61,10 +71,8 @@ def allocate_persistent_identifier(session_state_path: Path, kind: str, lock_tim
 
     lock_path = session_state_path.with_name(f"{session_state_path.name}.lock")
 
-    # Acquire advisory lock for the duration of state mutation.
     try:
         with advisory_lock(lock_path, timeout_seconds=lock_timeout):
-            # Load existing session state
             if session_state_path.exists():
                 try:
                     state = json.loads(session_state_path.read_text(encoding="utf-8"))
@@ -86,9 +94,8 @@ def allocate_persistent_identifier(session_state_path: Path, kind: str, lock_tim
             counters[kind] = next_value
             state["identifier_counters"] = counters
 
-            # Atomically write the updated state; fsync parent directory for durability.
             write_json_atomically(session_state_path, state, fsync_parent=True)
             return identifier
     except LockAcquireTimeout as error:
-        # Surface a clear runtime error if we couldn't acquire the lock in time.
         raise RuntimeError(f"session identifier allocator is locked: {session_state_path}") from error
+

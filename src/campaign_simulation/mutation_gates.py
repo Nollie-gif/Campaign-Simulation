@@ -162,6 +162,12 @@ _SAVE_DOMAINS = frozenset(
         MutationDomain.NPC_OPERATIONAL,
         MutationDomain.HOOK,
         MutationDomain.SCENARIO,
+        # Clock, autosave, and scheduler records are checkpoint state, not an
+        # alternate persistence path.  An ordinary manual save and an
+        # automatic save may carry them through the same gated generation.
+        MutationDomain.CAMPAIGN_CLOCK,
+        MutationDomain.AUTOSAVE,
+        MutationDomain.SCHEDULER,
         MutationDomain.GITHUB_STAGING,
         MutationDomain.SUPABASE_STAGING,
         MutationDomain.RECONCILIATION,
@@ -446,6 +452,7 @@ _RUNTIME_SQL_DOMAINS = frozenset(
         MutationDomain.SCENARIO,
         MutationDomain.DEFERRED_EVENT,
         MutationDomain.CAMPAIGN_CLOCK,
+        MutationDomain.AUTOSAVE,
         MutationDomain.SCHEDULER,
         MutationDomain.SUPABASE_STAGING,
         MutationDomain.SUPABASE_PUBLICATION,

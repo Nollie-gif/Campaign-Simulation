@@ -9,7 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from .autosave import AUTOSAVE_RECORD_ID, validate_autosave_state
+from .clock import CLOCK_RECORD_ID, validate_clock_state
 from .mutation_gates import MutationPlan, plan_to_mapping, validate_mutation_plan
+from .scheduler import SCHEDULER_RECORD_ID, validate_scheduler_state
 
 
 REQUIRED_MANIFEST_FIELDS = {"id", "kind", "status", "created_at", "record_revisions"}
@@ -116,10 +119,25 @@ def commit_manifest(destination: Path, manifest: Mapping[str, object]) -> None:
     raise ValueError("manifest-only save commits are not supported; use commit_checkpoint")
 
 
+def _validate_known_runtime_record(record_id: str, data: Mapping[str, object]) -> None:
+    """Apply stronger schema checks to engine-owned runtime records."""
+
+    if record_id == CLOCK_RECORD_ID:
+        validate_clock_state(data)
+    elif record_id == AUTOSAVE_RECORD_ID:
+        validate_autosave_state(data)
+    elif record_id == SCHEDULER_RECORD_ID:
+        validate_scheduler_state(data)
+
+
 def validate_checkpoint(
     manifest: Mapping[str, object], records: Mapping[str, Mapping[str, object]]
 ) -> None:
-    """Ensure every declared revision has exactly one supplied record snapshot."""
+    """Ensure every declared revision has exactly one supplied record snapshot.
+
+    Engine-owned runtime records (Campaign Clock, Autosave and Scheduler) receive
+    their subsystem validation before any checkpoint is allowed to commit.
+    """
 
     validate_manifest(manifest)
     if not isinstance(records, Mapping) or not records:
@@ -138,8 +156,10 @@ def validate_checkpoint(
         if not isinstance(snapshot, Mapping):
             raise ValueError("each checkpoint record must be an object")
         revision = _require_text(snapshot.get("revision"), "records.revision")
-        if not isinstance(snapshot.get("data"), Mapping):
+        data = snapshot.get("data")
+        if not isinstance(data, Mapping):
             raise ValueError("each checkpoint record requires an object data snapshot")
+        _validate_known_runtime_record(normalized_record_id, data)
         supplied.add((normalized_record_id, revision))
 
     if declared != supplied:
