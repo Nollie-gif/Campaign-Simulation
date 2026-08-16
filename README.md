@@ -6,7 +6,23 @@ Campaign Simulation is a reusable, campaign-neutral framework for exploring a pr
 
 The Main Campaign is the authoritative canon anchor. Simulation branches may read it, reason from it, and preserve continuity with it, but they never write into it automatically.
 
-This repository contains no campaign data, names, locations, characters, or populated examples.
+This repository contains no live private campaign state, names, locations, characters, or populated gameplay examples in its framework layer.
+
+## Reference implementation boundary
+
+The framework was developed alongside a private live reference implementation, **Mission 10**, where many of these contracts were first stressed by real gameplay.
+
+Mission 10 remains private because it contains live campaign state, hidden/DM information, and working material that is part of the campaign itself. Campaign-Simulation is the reusable, campaign-neutral implementation of the systems and lessons that survived that environment.
+
+This repository is therefore **not a synchronized mirror of Mission 10**. Campaign-specific adapters, live state, provider credentials, production identifiers, private canon and DM-only information do not belong here.
+
+The public relationship is intentionally simple:
+
+> Mission 10 is the private reference implementation and live simulation environment. Campaign-Simulation is the public, reusable template derived from the systems and lessons validated there.
+
+For the current parity review, see [Public Reference Parity Audit](docs/PUBLIC_REFERENCE_PARITY_AUDIT.md).
+
+Historical working artifacts used to document the evolution live under [artifacts/](artifacts/README.md). Those files are historical evidence, not current framework authority.
 
 ## Start here
 
