@@ -24,6 +24,18 @@ For the current parity review, see [Public Reference Parity Audit](docs/PUBLIC_R
 
 Historical working artifacts used to document the evolution live under [artifacts/](artifacts/README.md). Those files are historical evidence, not current framework authority.
 
+## Public use and licensing
+
+This repository is intended to be **public-use**, not merely public-view.
+
+The original Campaign-Simulation framework code and original framework documentation are released under the [MIT License](LICENSE), subject to the explicit scope described in [LICENSE_SCOPE.md](LICENSE_SCOPE.md). People are allowed to take the reusable framework, study it, modify it, fork it, build on it, and redistribute their MIT-licensed changes under the terms of that license.
+
+The historical files under [`artifacts/`](artifacts/) are different. They are development fossils and some contain fan-created material based on or referring to third-party intellectual property. They are **not** included in the repository's MIT software-license grant. See the dedicated [Historical Artifact Rights Notice](artifacts/RIGHTS.md).
+
+**Reuse the framework. Read the fossils as fossils.**
+
+That split is deliberate. The story is useful because the evidence remains attached to it; the software is useful because people are actually allowed to take it somewhere else.
+
 ## Start here
 
 1. Complete the three minimum playable inputs described in [Onboarding](docs/ONBOARDING.md).

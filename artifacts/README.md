@@ -4,6 +4,10 @@ This directory is the public archive for historical working artifacts that docum
 
 These files are evidence of development history, not current Campaign-Simulation authority.
 
+> **Rights boundary:** the repository's MIT License covers the reusable framework, not this historical artifact library. Some artifacts contain fan-created material based on or referring to Wizards of the Coast intellectual property. Read [RIGHTS.md](RIGHTS.md) before reusing artifact content.
+
+The distinction is intentional: **reuse the framework; read the fossils as fossils.**
+
 ## Naming
 
 - `(original)` = the recovered historical working artifact, preserved in its original language, structure, chronology, and mechanics.
@@ -82,6 +86,6 @@ Additional genuine historical artifacts may be added later if recovered. Missing
 
 ## Public-safety gate
 
-Before an artifact is added to this library, audit it for private data, local paths/usernames, emails, API responses, secrets/tokens, sensitive project identifiers, comments/suggestions, hidden document metadata, raw chat material, and campaign information that is intentionally private.
+Before an artifact is added to this library, audit it for private data, local paths/usernames, emails, API responses, secrets/tokens, sensitive project identifiers, comments/suggestions, hidden document metadata, raw chat material, campaign information that is intentionally private, and third-party material whose public distribution has not been cleared.
 
 The private Mission 10 live repository is not mirrored here. Only deliberately selected historical artifacts belong in this library.
