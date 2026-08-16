@@ -24,6 +24,20 @@ We are not trying to be mysterious about the boundary. We just love the monster,
 
 Historical working documents that are deliberately released as development fossils live in the [artifact library](artifacts/README.md). They are evidence of how the approach evolved, not current framework rules.
 
+## Can I actually use this?
+
+Yes. That is the point.
+
+The original Campaign-Simulation framework code and original framework documentation are released under the [MIT License](LICENSE). You can use, study, modify, fork, redistribute, and build on the MIT-licensed framework under the terms of that license.
+
+The historical artifact library is deliberately separate. Some of those old working documents contain fan-created material based on or referring to third-party intellectual property, so the repository's MIT License does not sweep over them just because they happen to sit beside the code. Their rights boundary is explained in [artifacts/RIGHTS.md](artifacts/RIGHTS.md).
+
+In human terms:
+
+**Take the framework. Build something strange with it. Keep the fossils labeled.**
+
+For the precise license boundary, see [LICENSE_SCOPE.md](LICENSE_SCOPE.md).
+
 ## The core idea
 
 Your Main Campaign is the source of truth.
