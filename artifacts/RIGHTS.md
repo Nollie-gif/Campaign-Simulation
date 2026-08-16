@@ -6,7 +6,7 @@ The files in this directory are preserved as historical development evidence. Th
 
 Campaign-Simulation Historical Artifact Library is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
 
-The current Wizards of the Coast Fan Content Policy is available from Wizards' official legal site. That policy, not this repository, determines what use of Wizards intellectual property is permitted.
+The current [Wizards of the Coast Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy) is the authority for the fan-content permission relied on here. That policy, not this repository, determines what use of Wizards intellectual property is permitted.
 
 ## Scope
 
