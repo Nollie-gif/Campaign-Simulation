@@ -15,6 +15,12 @@ from urllib.request import Request, urlopen
 REPOSITORY_MODE = "repository"
 SUPABASE_MODE = "supabase"
 DEFAULT_SUPABASE_KEY_ENV_VAR = "SUPABASE_KEY"
+SUPABASE_ONBOARDING_NOTE = "☀️ Enter the Language of the Sun mod."
+SUPABASE_SUCCESS_NOTE = (
+    "This plugin exists because at some point we discovered that asking an AI to remember "
+    "everything was a spectacularly bad architectural decision.\n"
+    "Thanks for installing it. Take care of the campaign. ❤️"
+)
 CONFIGURATION_FIELDS = {
     "storage_mode",
     "supabase_url",
@@ -169,6 +175,7 @@ def resolve_storage_mode(
     input_fn=input,
     external_probe: Callable[..., bool] | None = None,
     environment: Mapping[str, str] | None = None,
+    output_fn=print,
 ) -> dict[str, str]:
     """Return a validated local preference with safe repository fallback.
 
@@ -194,6 +201,9 @@ def resolve_storage_mode(
         _write_configuration(config_path, result)
         return result
 
+    # Human-facing flavor only. These messages never enter persisted configuration,
+    # provider responses, validation errors, or authoritative runtime state.
+    output_fn(SUPABASE_ONBOARDING_NOTE)
     url = input_fn("Supabase URL (HTTPS): ").strip()
     key_env_var = input_fn(
         f"Supabase API key environment variable ({DEFAULT_SUPABASE_KEY_ENV_VAR}): "
@@ -210,4 +220,6 @@ def resolve_storage_mode(
         external_probe,
     )
     _write_configuration(config_path, result)
+    if result["storage_mode"] == SUPABASE_MODE:
+        output_fn(SUPABASE_SUCCESS_NOTE)
     return result
