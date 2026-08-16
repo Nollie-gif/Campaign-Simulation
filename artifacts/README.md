@@ -4,7 +4,7 @@ This directory is the public archive for historical working artifacts that docum
 
 These files are evidence of development history, not current Campaign-Simulation authority.
 
-> **Rights boundary:** the repository's MIT License covers the reusable framework, not this historical artifact library. Some artifacts contain fan-created material based on or referring to Wizards of the Coast / Dungeons & Dragons / Forgotten Realms intellectual property. Read [RIGHTS.md](RIGHTS.md) before reusing artifact content.
+> **Rights boundary:** the repository's MIT License covers the reusable framework, not this historical artifact library. Some artifacts contain fan-created material based on or referring to Wizards of the Coast intellectual property. Read [RIGHTS.md](RIGHTS.md) before reusing artifact content.
 
 The distinction is intentional: **reuse the framework; read the fossils as fossils.**
 
