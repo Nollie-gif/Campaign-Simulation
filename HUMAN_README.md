@@ -12,6 +12,18 @@ The framework then creates a separate simulation branch around it:
 
 The Main Campaign stays protected. The simulation is the place where experimentation happens.
 
+## Where this came from
+
+Campaign Simulation grew out of lessons learned while building and actually playing a much more specific private campaign environment called **Mission 10**.
+
+Mission 10 is the private reference implementation and live simulation environment. Campaign-Simulation is the public, reusable template derived from the systems and lessons validated there.
+
+That means this repository is deliberately not a copy of the private campaign. You will not find its live save state, hidden DM information, private canon, NPC secrets, or current gameplay here. What belongs here are the reusable contracts and tools that survived contact with actual play.
+
+We are not trying to be mysterious about the boundary. We just love the monster, therefore strangers do not get the keys to its basement.
+
+Historical working documents that are deliberately released as development fossils live in the [artifact library](artifacts/README.md). They are evidence of how the approach evolved, not current framework rules.
+
 ## The core idea
 
 Your Main Campaign is the source of truth.
