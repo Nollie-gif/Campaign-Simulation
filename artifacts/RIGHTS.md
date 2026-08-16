@@ -10,7 +10,7 @@ The current Wizards of the Coast Fan Content Policy is available from Wizards' o
 
 ## Scope
 
-Some historical artifacts contain original campaign writing, working notes, mechanics, references, names, locations, or other material created while playing or designing around Dungeons & Dragons / Forgotten Realms material.
+Some historical artifacts contain original campaign writing, working notes, mechanics, references, names, locations, or other material created while playing or designing around Wizards of the Coast material.
 
 The repository's MIT License does **not** grant a license to Wizards of the Coast intellectual property, third-party trademarks, artwork, published rules text, or any other material owned by someone else.
 
