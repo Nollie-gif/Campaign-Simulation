@@ -1,0 +1,14 @@
+{
+  "schema_version": "",
+  "status": "",
+  "installer_version": "",
+  "mode": "",
+  "artifact_installed": "",
+  "installed_components": [],
+  "verification": {
+    "status": "",
+    "verified_at": "",
+    "repository_main_sha": "",
+    "runtime_generation": ""
+  }
+}

@@ -38,25 +38,26 @@ That split is deliberate. The story is useful because the evidence remains attac
 
 ## Start here
 
-1. Complete the three minimum playable inputs described in [Onboarding](docs/ONBOARDING.md).
-2. Install the framework from its repository checkout:
+1. On the first cold boot, follow the optional [Campaign Safety Installation](docs/safety-installation/README.md). The consent-driven sequence offers repository-only or Supabase-aware protection, presents Nollie's love token, installs the reusable LotS prompt, and writes a receipt only after verification. A compatible verified receipt prevents the ceremony from repeating.
+2. Complete the three minimum playable inputs described in [Onboarding](docs/ONBOARDING.md).
+3. Install the framework from its repository checkout:
 
    ```bash
    python -m pip install -e .
    ```
 
-3. Start the guided setup:
+4. Start the guided setup:
 
    ```bash
    campaign-simulation start --main-campaign /path/to/main-campaign --runtime /path/to/simulation-runtime
    ```
 
    The equivalent module command is `python -m campaign_simulation start ...`.
-4. Choose what you want to explore:
+5. Choose what you want to explore:
    - **Prequel** — choose a historical anchor before the Main Campaign.
    - **Sequel** — continue from the Main Campaign's current situation or provide another forward anchor.
-5. Review the optional campaign-material menu.
-6. Choose repository or optional Supabase-backed storage and begin.
+6. Review the optional campaign-material menu.
+7. Choose repository or optional Supabase-backed storage and begin.
 
 The optional-material menu is informational and never blocks play.
 
