@@ -49,12 +49,14 @@ The menu must always include **Continue without adding material**. Choosing it i
 
 ## First-boot order
 
-1. Evaluate the Minimum Playable Campaign Gate.
-2. If blocked, show only the missing inputs.
-3. If admitted, show the Prequel / Sequel exploration menu.
-4. Resolve the branch start anchor.
-5. Show the optional-material menu.
-6. Accept either zero or more optional selections.
-7. Ask for the storage preference.
-8. Persist the selected simulation branch in the local runtime.
-9. Start the simulation runtime.
+1. Check the selected runtime for a compatible verified safety-installation receipt.
+2. If the receipt is absent, invalid, or incompatible, offer the optional first-boot safety sequence and complete, decline, or safely stop it before gameplay onboarding.
+3. Evaluate the Minimum Playable Campaign Gate.
+4. If blocked, show only the missing inputs.
+5. If admitted, show the Prequel / Sequel exploration menu.
+6. Resolve the branch start anchor.
+7. Show the optional-material menu.
+8. Accept either zero or more optional selections.
+9. Ask for the storage preference.
+10. Persist the selected simulation branch in the local runtime.
+11. Start the simulation runtime.
