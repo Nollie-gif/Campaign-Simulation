@@ -1,5 +1,15 @@
 # Onboarding contract
 
+## Optional first-boot safety layer
+
+Before gameplay onboarding, check for a verified compatible safety-installation receipt at `.campaign-simulation/safety-installation.json` in the selected runtime.
+
+- If a compatible verified receipt exists, continue without replaying the ceremony.
+- If no valid receipt exists, remain read-only and follow [First-Boot Safety Installation Protocol](safety-installation/FIRST_BOOT_PROTOCOL.md).
+- The human may decline the optional layer without blocking gameplay.
+- Installation consent, configuration consent, mutation consent, verification, and receipt creation are separate states.
+- All future-user messages in this technical sequence are English-only. Campaign prose remains language-neutral.
+
 ## Minimum Playable Campaign Gate
 
 The framework starts only when these three inputs exist:
