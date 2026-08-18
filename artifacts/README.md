@@ -21,6 +21,8 @@ A normal legacy translation carries publication provenance such as:
 >
 > Translated for publication. Structure and mechanics preserved from the original Greek working document.
 
+The Post 2 additions (`06`-`09`) are public Markdown snapshots converted from the working DOCX files used in the publication pack. Their visible content is preserved while formatting is simplified for repository readability. They remain historical evidence, not current framework authority or live Mission 10 state.
+
 ## Fidelity rule
 
 Historical mechanics are not silently modernized.
@@ -72,6 +74,35 @@ Later separation-of-concerns architecture. The Word document stops being the sav
 
 This stage is primarily a Post 2 artifact because it records the transition from document-based state to repository/state architecture.
 
+### `06-dm-control-room/`
+
+Mission 10 agent-entry cockpit and selective-authority routing snapshot. Its central rule is to classify the request first, read the smallest authoritative source, then use only that path. It also captures the principle that persistence protects durable mutation without turning every narrative beat into database work.
+
+- Public Markdown snapshot of the working Post 2 artifact.
+- Historical Mission 10 workflow evidence; not current Campaign-Simulation authority.
+
+### `07-workflow-decision-memory/`
+
+Workflow & Decision Memory Reference v3.1. It records the explicit separation between repository implementation truth, durable WDR decision memory, concise Asana live workflow control, and chat as supporting context. It also contains the blank WDR template used by the workflow.
+
+- Public Markdown snapshot of the working Post 2 artifact.
+- Live workflow status must never be inferred from this historical snapshot.
+
+### `08-wdr-004-ai-semantic-control/`
+
+WDR-004: AI Semantic Control Architecture. This is the durable architecture thesis behind the "Language of the Sun" direction: let the agent choose **WHAT** it intends to do while deterministic infrastructure owns repeatable **HOW** choreography. It preserves the Control Server / shared human-and-AI semantic interface concept, the Day 19 positive observation that motivated further testing, and the unresolved research boundaries.
+
+- Public Markdown snapshot of the working Post 2 artifact.
+- The Day 19 observation is hypothesis-motivating evidence, not proof of causation.
+- The record explicitly leaves information representation, temporary-state strategy, synchronization cadence, and implementation language open to testing.
+
+### `09-velare/`
+
+Vēlāre origin and identity record. A transcription accident became a recurring creative identity and, unexpectedly, a readable expression of the same architecture question: if the DM-agent carries less operational machinery, more room may remain for pacing, initiative, personality, humour, and spontaneous scene texture.
+
+- Public Markdown snapshot of the working Post 2 artifact.
+- Vēlāre is not a mandatory game mechanic, persistence category, or forced comedy system.
+
 ## Intended chronology
 
 The current recovered chain is:
@@ -81,6 +112,10 @@ The current recovered chain is:
 3. Mission 10 live working document
 4. Robbert Incorporation v3 -> v3.1 consistency correction
 5. Robbert Incorporation v4.1 / repository-state separation
+6. DM Control Room / selective authority routing
+7. Workflow & Decision Memory Reference / externalized decision and workflow memory
+8. WDR-004 / semantic control architecture and Language of the Sun
+9. Vēlāre / humour-and-identity resolution of the same operational-load question
 
 Additional genuine historical artifacts may be added later if recovered. Missing artifacts are never invented to make the timeline look cleaner.
 
