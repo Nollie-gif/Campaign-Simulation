@@ -21,7 +21,7 @@ A normal legacy translation carries publication provenance such as:
 >
 > Translated for publication. Structure and mechanics preserved from the original Greek working document.
 
-The Post 2 additions (`06`-`09`) are public Markdown snapshots converted from the working DOCX files used in the publication pack. Their visible content is preserved while formatting is simplified for repository readability. They remain historical evidence, not current framework authority or live Mission 10 state.
+The Post 2 additions (`06`-`09`) follow the same archive pattern as the earlier set: the actual working DOCX artifacts are preserved as `(original)` files. No repository-readable Markdown duplicate is added merely for convenience.
 
 ## Fidelity rule
 
@@ -78,21 +78,21 @@ This stage is primarily a Post 2 artifact because it records the transition from
 
 Mission 10 agent-entry cockpit and selective-authority routing snapshot. Its central rule is to classify the request first, read the smallest authoritative source, then use only that path. It also captures the principle that persistence protects durable mutation without turning every narrative beat into database work.
 
-- Public Markdown snapshot of the working Post 2 artifact.
+- `(original)` — recovered working DOCX used in the Post 2 publication pack.
 - Historical Mission 10 workflow evidence; not current Campaign-Simulation authority.
 
 ### `07-workflow-decision-memory/`
 
 Workflow & Decision Memory Reference v3.1. It records the explicit separation between repository implementation truth, durable WDR decision memory, concise Asana live workflow control, and chat as supporting context. It also contains the blank WDR template used by the workflow.
 
-- Public Markdown snapshot of the working Post 2 artifact.
+- `(original)` — recovered working DOCX used in the Post 2 publication pack.
 - Live workflow status must never be inferred from this historical snapshot.
 
 ### `08-wdr-004-ai-semantic-control/`
 
 WDR-004: AI Semantic Control Architecture. This is the durable architecture thesis behind the "Language of the Sun" direction: let the agent choose **WHAT** it intends to do while deterministic infrastructure owns repeatable **HOW** choreography. It preserves the Control Server / shared human-and-AI semantic interface concept, the Day 19 positive observation that motivated further testing, and the unresolved research boundaries.
 
-- Public Markdown snapshot of the working Post 2 artifact.
+- `(original)` — recovered working DOCX used in the Post 2 publication pack.
 - The Day 19 observation is hypothesis-motivating evidence, not proof of causation.
 - The record explicitly leaves information representation, temporary-state strategy, synchronization cadence, and implementation language open to testing.
 
@@ -100,7 +100,7 @@ WDR-004: AI Semantic Control Architecture. This is the durable architecture thes
 
 Vēlāre origin and identity record. A transcription accident became a recurring creative identity and, unexpectedly, a readable expression of the same architecture question: if the DM-agent carries less operational machinery, more room may remain for pacing, initiative, personality, humour, and spontaneous scene texture.
 
-- Public Markdown snapshot of the working Post 2 artifact.
+- `(original)` — recovered working DOCX used in the Post 2 publication pack.
 - Vēlāre is not a mandatory game mechanic, persistence category, or forced comedy system.
 
 ## Intended chronology
