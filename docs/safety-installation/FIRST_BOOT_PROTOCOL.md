@@ -8,7 +8,16 @@ Provide a short, consent-driven installation sequence for DMs who may have no so
 
 Check for a verified compatible receipt at `.campaign-simulation/safety-installation.json`.
 
-If it exists and matches the installed mechanism, continue normal onboarding without replaying this sequence.
+A receipt is compatible only when all of the following are true:
+
+- `schema_version` is `1`;
+- `installer_version` is supported by the current mechanism;
+- `status` is `complete`;
+- `verification.status` is `pass`;
+- `installed_components` is present and non-empty;
+- every listed component has an identifier and explicit installer ownership.
+
+If the receipt satisfies every compatibility rule, continue normal onboarding without replaying this sequence.
 
 If it is missing, invalid, or incompatible:
 
@@ -44,7 +53,7 @@ If the reply is ambiguous, ask one short clarifying question and remain read-onl
 
 If the human declines, record nothing and continue without the optional safety layer.
 
-If the human confirms, present State 3.
+If the human confirms, normalize choice **3 — Not yet** to `repository-only` with a preserved future Supabase upgrade path, then present State 3.
 
 ## State 3 — Love token and final mutation consent
 
@@ -106,7 +115,13 @@ Only after verification succeeds, write:
   "installer_version": 1,
   "mode": "repository-only",
   "artifact_installed": true,
-  "installed_components": [],
+  "installed_components": [
+    {
+      "kind": "file",
+      "identifier": "<installed component path>",
+      "ownership": "campaign-safety-installer"
+    }
+  ],
   "verification": {
     "status": "pass",
     "verified_at": "<ISO-8601 timestamp>",
@@ -116,7 +131,7 @@ Only after verification succeeds, write:
 }
 ```
 
-For Supabase-aware mode, set `mode` to `supabase-aware` and record only non-secret identifiers needed for verification and removal. Never store credentials in the receipt.
+The completed receipt must contain a non-empty inventory of every installed component. Each entry must record its kind, non-secret identifier, and explicit installer ownership. For Supabase-aware mode, set `mode` to `supabase-aware` and record only non-secret identifiers needed for verification and removal. Never store credentials in the receipt.
 
 Then display:
 
