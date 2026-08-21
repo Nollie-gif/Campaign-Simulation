@@ -130,11 +130,24 @@ insufficient: a PR could still legitimately *exempt* the resulting
 ledger requirement with a trailer and merge its weakened file content
 anyway. `check_committed_ledger_script_is_sane()` closes that specific
 gap by independently inspecting the PR's *own* proposed file (via `git
-show`, parsed with `ast`, never executed) and is not waivable by any
-exemption. None of this stops an already-trusted committer from
-weakening `main`'s copy across two separately-merged PRs — that boundary
-is branch protection and human review, not this script, and no script
-can fully protect against its own maintainer.
+show :path` — the index, not `HEAD:path`, so a staged-but-uncommitted
+weakening is caught immediately rather than only after it lands — parsed
+with `ast`, never executed) and is not waivable by any exemption. None of
+this stops an already-trusted committer from weakening `main`'s copy
+across two separately-merged PRs — that boundary is branch protection and
+human review, not this script, and no script can fully protect against
+its own maintainer.
+
+Local preflight itself (`scripts/preflight_commit.py`) is a courtesy for
+a cooperating committer, not a hardened boundary: anyone with write
+access to their own working tree can edit it, edit `.githooks/pre-commit`,
+or run `git commit --no-verify`. A local COMMIT-READY is a fast local echo
+of what CI will independently re-check, not a security attestation — the
+real, non-bypassable boundary is always CI's trusted-copy execution plus
+the checks above. (Found by a second round of automated pre-merge review
+against PR #21; see `ENGINE_CHANGELOG.md`'s "Change-ledger checker
+hardening" entry for the three concrete local-only bugs that review also
+found and fixed — none of which affected CI.)
 
 ## Verification
 

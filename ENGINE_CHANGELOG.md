@@ -12,6 +12,67 @@ anything before that date.
 
 ---
 
+## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
+
+**Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but
+blocked from merge by the branch ruleset's `required_review_thread_resolution`
+rule: an automated reviewer (`chatgpt-codex-connector`) had left 5 unresolved
+P2 threads on `tools/validate_change_ledger.py` and `scripts/preflight_commit.py`.
+Per explicit instruction, these were investigated and judged on their merits
+rather than dismissed to unblock the merge, and `--admin` was not used.
+
+**Findings and disposition:**
+1. **Fixed.** `changed_paths()` compared a union of "paths touched in
+   committed history" and "paths touched in the staged diff" — an
+   already-committed ledger update could paper over a later staged revert of
+   that same update alongside a new, unrelated sensitive change. Replaced
+   with a diff of the merge-base against the *prospective* tree
+   (`git write-tree`, no commit created), which correctly nets out reverts.
+   Identical behavior in CI (nothing is ever staged beyond HEAD there, so the
+   prospective tree equals HEAD's tree).
+2. **Fixed.** `check_committed_ledger_script_is_sane()` read
+   `HEAD:tools/validate_change_ledger.py` — a self-weakening of this file
+   that was staged but not yet committed (while the working tree happened to
+   show safe content) was invisible until after it actually landed. Now
+   reads the index (`git show :path`), which is exactly what `git commit`
+   (without `-a`) is about to commit. Identical to `HEAD:path` in CI, where
+   the index always equals HEAD.
+3. **Fixed (usability, not a security gap).** The `Ledger-Exempt:` trailer
+   is read from committed commit messages, but preflight runs *before*
+   `git commit` — a genuine first-time exemption could never produce
+   COMMIT-READY through the primary local path, since the commit carrying
+   the trailer doesn't exist yet. Added `scripts/preflight_commit.py
+   --pending-exempt "FILE REASON"`, which sets
+   `CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT` for that local run only. CI
+   never sets this variable and still requires the real committed trailer
+   regardless of what local preflight predicted.
+4. **Documented, not changed.** Two findings (self-referential trust: a
+   locally-modified `preflight_commit.py`/`validate_change_ledger.py` run
+   directly, not from a trusted copy, could lie to itself) describe a true
+   and irreducible property of any local-only gate — there is no local root
+   of trust that can stop someone from lying to their own working tree. This
+   was already the documented design (the real, non-bypassable boundary is
+   CI's trusted-copy-from-`origin/main` execution plus the
+   non-exemptable self-check above). Strengthened `preflight_commit.py`'s
+   module docstring to state this explicitly rather than leaving it implicit.
+
+**Verification:** all three fixes were adversarially reproduced by hand
+before being accepted as fixed (staged a revert-while-sensitive-change
+scenario and confirmed the old union logic would have wrongly passed it
+while the new logic correctly fails it; staged a self-weakening with disk
+reverted to safe content and confirmed the old `HEAD`-read would have missed
+it while the new index-read catches it; confirmed the pending-exempt
+variable is absent by default and never confused with a real trailer). All
+four scenarios are now permanent regression coverage in the new
+`tests/test_validate_change_ledger.py` (uses a disposable temp-directory git
+repo per test via `unittest.mock.patch.object(vcl, "ROOT", ...)`, not the
+real repository). Full suite: 135 tests, `OK (skipped=4)`.
+
+**Compatibility:** no change to what CI enforces or to any already-recorded
+`Ledger-Exempt:` trailer's meaning.
+
+---
+
 ## 2026-08-21 — Flight Control Extraction
 
 **Category:** Repository continuity / local engineering guardrail

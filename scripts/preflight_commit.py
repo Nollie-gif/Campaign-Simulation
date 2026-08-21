@@ -9,6 +9,19 @@ not itself commit, push, merge, or perform any campaign-simulation runtime
 mutation (checkpoint/manifest commit, publication). It verifies the exact
 staged engineering change and writes short-lived COMMIT-READY evidence
 under .git/ for the versioned pre-commit hook.
+
+Trust boundary (found by adversarial review of this extraction — see
+tests/test_preflight_commit.py and ENGINE_CHANGELOG.md's 2026-08-21 entries):
+this script and the local pre-commit hook are a courtesy for a cooperating
+committer, not a hardened security boundary. Anyone with write access to
+their own working tree can edit this file, edit .githooks/pre-commit, or
+run `git commit --no-verify` — there is no local root of trust that can
+prevent someone from lying to their own local tools. The real, non-bypassable
+boundary is server-side: the branch ruleset's required CI status checks, and
+`tools/validate_change_ledger.py` being executed in CI from a trusted copy
+fetched from `origin/main` rather than the pull request's own (possibly
+weakened) copy. Do not treat a local COMMIT-READY as a security attestation;
+treat it as a fast local echo of what CI will independently re-check.
 """
 
 from __future__ import annotations
@@ -662,7 +675,7 @@ def _remove_tree(path: Path) -> None:
     shutil.rmtree(path, onerror=_on_error)
 
 
-def run_required_checks(root: Path) -> None:
+def run_required_checks(root: Path, pending_exempt: Sequence[str] = ()) -> None:
     child_env = _utf8_child_env()
     # A handful of tests are inherently about real Git checkout mechanics
     # (the versioned pre-commit hook's actual interpreter-selection
@@ -727,6 +740,20 @@ def run_required_checks(root: Path) -> None:
     # (merge-base, diff, log against origin/main) that the deliberately
     # .git-less materialized snapshot above cannot provide. Run it directly
     # against the real repository root instead of inside that snapshot.
+    if pending_exempt:
+        # The permanent, CI-enforced exemption mechanism is a commit-message
+        # trailer, but that message does not exist yet at preflight time -
+        # preflight runs *before* `git commit`. Without this, a legitimate
+        # first-time exemption can never produce COMMIT-READY, because
+        # nothing has been committed yet for the ledger check's git-log scan
+        # to find (found by adversarial review, not theoretical). This env
+        # var only ever affects this local, non-authoritative preflight
+        # prediction; CI never sets it, and CI's own exempted_ledgers() scan
+        # still requires the real trailer to be present in the actual
+        # committed message, or CI fails regardless of what preflight said.
+        child_env["CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT"] = "\n".join(
+            f"Ledger-Exempt: {entry}" for entry in pending_exempt
+        )
     ledger_result = subprocess.run(
         [sys.executable, "tools/validate_change_ledger.py"],
         cwd=root,
@@ -748,7 +775,7 @@ def run_required_checks(root: Path) -> None:
     print("CHECK-PASS: Change ledger validation")
 
 
-def run_preflight(root: Path) -> None:
+def run_preflight(root: Path, pending_exempt: Sequence[str] = ()) -> None:
     branch = current_branch(root)
     assert_hook_is_active(root)
     assert_clean_staging_area(root)
@@ -756,7 +783,7 @@ def run_preflight(root: Path) -> None:
     origin_main = assert_current_with_origin_main(root)
     before = staged_snapshot(root, branch=branch, origin_main=origin_main)
 
-    run_required_checks(root)
+    run_required_checks(root, pending_exempt)
 
     assert_clean_staging_area(root)
     assert_staged_diff_is_clean(root)
@@ -785,6 +812,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Verify existing COMMIT-READY evidence; used by the pre-commit hook.",
     )
+    parser.add_argument(
+        "--pending-exempt",
+        action="append",
+        default=[],
+        metavar="\"FILE REASON\"",
+        help=(
+            "Predict a Ledger-Exempt trailer you are about to commit, so this "
+            "first preflight run for a legitimate exemption can produce "
+            "COMMIT-READY. You must still put the identical "
+            "'Ledger-Exempt: FILE REASON' trailer in the real commit message "
+            "- CI re-derives the exemption from the actual committed message, "
+            "not from this flag. Repeatable."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -792,7 +833,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.verify_marker:
             verify_marker(root)
         else:
-            run_preflight(root)
+            run_preflight(root, args.pending_exempt)
     except PreflightStop as exc:
         print(f"STOP-{exc.code}: {exc.message}", file=sys.stderr)
         return 1

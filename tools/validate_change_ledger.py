@@ -35,18 +35,43 @@ Self-defense notes (found by adversarial review, not theoretical):
   copy for every subsequent PR.
 - The real fix is `check_committed_ledger_script_is_sane()`: when
   `tools/validate_change_ledger.py` itself is in the diff, it reads the
-  pull request's *own* committed version (`git show HEAD:...`, not the
-  overwritten working copy) with `ast.parse` — never executed — and
-  independently counts `LEDGER_DOMAINS` entries against this trusted
-  script's own `MINIMUM_DOMAIN_COUNT`. This check is not exemptable and
-  does not depend on what the PR's version of the script would have
+  pull request's *own* index version (`git show :...`, not the overwritten
+  working copy, and not HEAD — see below) with `ast.parse` — never
+  executed — and independently counts `LEDGER_DOMAINS` entries against this
+  trusted script's own `MINIMUM_DOMAIN_COUNT`. This check is not exemptable
+  and does not depend on what the PR's version of the script would have
   decided about itself.
+
+Local-preflight-specific notes (a second round of adversarial review, found
+against PR #21 by an automated reviewer before merge — real findings, not
+theoretical, and none of them affect the CI-enforced boundary above):
+- `changed_paths()` diffs the merge-base against the *prospective* tree
+  (`git write-tree`) rather than HEAD or a union of separately-collected
+  path lists — see that function's docstring for the specific scenario this
+  closes (a staged revert of an already-committed ledger update, alongside
+  a new unrelated sensitive change, could otherwise look satisfied).
+- `check_committed_ledger_script_is_sane()` reads the index (`git show
+  :path`), not `HEAD:path`, so a *staged-but-not-yet-committed* weakening of
+  this file is caught immediately during local preflight instead of only
+  after it lands. Identical to `HEAD:path` in CI, where the index always
+  matches HEAD.
+- `CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT` lets local preflight predict
+  a `Ledger-Exempt:` trailer that does not exist yet (the commit carrying it
+  hasn't been made at preflight time). This is local-only and
+  non-authoritative: CI never sets it, and CI still requires the identical
+  real trailer in the actual committed message regardless of what local
+  preflight predicted.
+- None of the three notes above change what CI enforces — CI has no staged
+  state (index already equals HEAD) and never sets the pending-exemption
+  variable. They fix local preflight giving an incorrect or unusable
+  prediction of what CI will do, not a gap in what CI itself does.
 """
 
 from __future__ import annotations
 
 import ast
 import fnmatch
+import os
 import re
 import subprocess
 import sys
@@ -104,6 +129,22 @@ def tracked_files() -> list[str]:
 
 
 def changed_paths() -> set[str]:
+    """Diff the merge-base against the *prospective* tree - what would exist
+    if everything currently staged were committed right now - rather than
+    against HEAD or a union of separately-collected path name lists.
+
+    `git write-tree` writes the current index as a real tree object without
+    creating a commit. In CI nothing is ever staged beyond HEAD, so this
+    tree is identical to HEAD's tree and behavior there is unchanged. Locally,
+    it reflects staged adds *and* staged reverts correctly, which a union of
+    "paths touched in committed history" + "paths touched in the staged
+    diff" cannot: adversarial review found that union could let an earlier,
+    already-committed ledger update paper over a later staged change that
+    reverts that very ledger update while introducing a new, unrelated
+    sensitive change in the same breath - the union still "sees" the ledger
+    file as touched, even though the tree about to be committed would not
+    actually carry that update relative to the merge base.
+    """
     base = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
@@ -111,15 +152,17 @@ def changed_paths() -> set[str]:
     if base.returncode != 0:
         return set()
     merge_base = base.stdout.strip()
-    committed = _git("diff", "--name-only", f"{merge_base}..HEAD")
-    # Also include the currently staged (but not yet committed) diff. Local
-    # Flight Control preflight runs this before the commit that would
-    # satisfy the requirement actually exists, so committed-only history
-    # can never see it - a ledger update staged right now must count
-    # immediately, not only after landing. In CI there is never anything
-    # staged beyond what HEAD already has, so this is a no-op there.
-    staged = _git("diff", "--cached", "--name-only")
-    return {line for line in (committed + staged).splitlines() if line}
+    tree = subprocess.run(
+        ["git", "write-tree"], cwd=ROOT, capture_output=True, text=True,
+    )
+    if tree.returncode != 0:
+        # Unmerged/conflicted index or similar unusual state: fall back to
+        # the committed-only comparison rather than fail outright.
+        committed = _git("diff", "--name-only", f"{merge_base}..HEAD")
+        return {line for line in committed.splitlines() if line}
+    prospective_tree = tree.stdout.strip()
+    diff = _git("diff", "--name-only", merge_base, prospective_tree)
+    return {line for line in diff.splitlines() if line}
 
 
 def exempted_ledgers() -> set[str]:
@@ -131,7 +174,16 @@ def exempted_ledgers() -> set[str]:
         return set()
     merge_base = base.stdout.strip()
     log = _git("log", f"{merge_base}..HEAD", "--format=%B")
-    return {m.group(1) for m in EXEMPT_TRAILER.finditer(log)}
+    exempt = {m.group(1) for m in EXEMPT_TRAILER.finditer(log)}
+    # Local-only, non-authoritative: a preflight run predicting a trailer it
+    # is about to commit (see scripts/preflight_commit.py --pending-exempt),
+    # so a first-time legitimate exemption isn't blocked by the fact that
+    # the commit carrying its trailer doesn't exist yet at preflight time.
+    # CI never sets this variable, so this is a no-op there; CI always
+    # re-derives the exemption from the real committed trailer above.
+    pending = os.environ.get("CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT", "")
+    exempt |= {m.group(1) for m in EXEMPT_TRAILER.finditer(pending)}
+    return exempt
 
 
 def matches_any(path: str, patterns: list[str]) -> bool:
@@ -203,17 +255,27 @@ def _count_ledger_domains_in_source(source: str) -> int | None:
 
 def check_committed_ledger_script_is_sane(diff: set[str]) -> list[str]:
     """Independent of assert_domains_sane(): that function checks the
-    trusted executing copy; this checks what the PR actually proposes to
+    trusted executing copy; this checks what the change actually proposes to
     commit, by reading it from Git rather than the working tree (which CI
-    has already overwritten) or executing it. Not waivable by exemption."""
+    has already overwritten) or executing it. Not waivable by exemption.
+
+    Reads the *index* (`git show :path`), not `HEAD:path`. In CI the index
+    always matches HEAD (a clean checkout, nothing staged), so this is
+    unchanged there. Locally, `diff` (see changed_paths()) can already be
+    "yes, SELF_PATH is part of the prospective change" purely from a staged-
+    but-not-yet-committed edit; reading HEAD in that situation inspects the
+    old, pre-staged content and misses a staged weakening entirely until
+    after it is already committed - found by adversarial review, not
+    theoretical.
+    """
     if SELF_PATH not in diff:
         return []
     result = subprocess.run(
-        ["git", "show", f"HEAD:{SELF_PATH}"],
+        ["git", "show", f":{SELF_PATH}"],
         cwd=ROOT, capture_output=True, text=True,
     )
     if result.returncode != 0:
-        return [f"{SELF_PATH} is in the diff but could not be read from HEAD for inspection."]
+        return [f"{SELF_PATH} is in the diff but could not be read from the index for inspection."]
     count = _count_ledger_domains_in_source(result.stdout)
     if count is None:
         return [

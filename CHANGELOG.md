@@ -37,3 +37,8 @@ CHANGELOG."
   `python scripts/preflight_commit.py` before each commit — see
   `AGENT_HANDOFF.md` for the full guardrail and how it relates to the
   separate, DM-facing Experiment Safety installation.
+- **(engineering)** Hardened `tools/validate_change_ledger.py` against 3
+  real gaps found by automated pre-merge review of the Flight Control PR
+  (a revert-vs-committed-history edge case, a staged-vs-HEAD self-check
+  blind spot, and an exemption-trailer chicken-and-egg deadlock in local
+  preflight). None of the three affected CI. See `ENGINE_CHANGELOG.md`.
