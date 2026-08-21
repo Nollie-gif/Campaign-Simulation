@@ -64,10 +64,33 @@ Ledger-Exempt: ENGINE_CHANGELOG.md test-only, no architecture change
 
 This is a visible, permanent, auditable choice recorded in git history — it
 is never a silent skip. Use it honestly; do not add it to avoid writing a
-real entry for a change that has one.
+real entry for a change that has one. `tools/list_ledger_exemptions.py`
+lists every exemption ever used, for periodic human review of whether the
+mechanism is being used honestly.
+
+### Limits of this mechanism
+
+The domain patterns in `tools/validate_change_ledger.py` are path globs.
+Renaming or moving a protected directory can silently stop a pattern from
+matching anything — `check_pattern_coverage()` fails CI if that happens,
+but only for patterns that already exist; a wholesale restructure still
+needs a human to update the patterns themselves.
+
+A PR editing the checker itself is graded using the `origin/main` copy,
+not its own — but that alone was proven (by testing, not by inspection)
+insufficient: a PR could still legitimately *exempt* the resulting
+ledger requirement with a trailer and merge its weakened file content
+anyway. `check_committed_ledger_script_is_sane()` closes that specific
+gap by independently inspecting the PR's *own* proposed file (via `git
+show`, parsed with `ast`, never executed) and is not waivable by any
+exemption. None of this stops an already-trusted committer from
+weakening `main`'s copy across two separately-merged PRs — that boundary
+is branch protection and human review, not this script, and no script
+can fully protect against its own maintainer.
 
 ## Verification
 
 Run `python -m unittest discover -s tests -v`. CI also runs
-`tools/validate_blank_templates.py`, `tools/validate_artifact_manifest.py`,
-and `tools/public_safety_scan.py` — see those scripts for what each checks.
+`tools/validate_blank_templates.py` and `tools/validate_artifact_manifest.py`.
+`tools/public_safety_scan.py` exists but is not yet active on `main` — see
+open PR #17, intentionally left unmerged as a separate finding.
