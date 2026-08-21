@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_EMAIL_PATTERN = re.compile(r"^[0-9]+\+[\w-]+@users\.noreply\.github\.com$")
+ALLOWED_EMAIL_PATTERN = re.compile(r"^([0-9]+\+[\w-]+@users\.noreply\.github\.com|noreply@github\.com)$")
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
 
 # Text files only; binary artifacts (docx/pdf) get their own metadata check below.
