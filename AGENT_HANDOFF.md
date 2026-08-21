@@ -58,8 +58,8 @@ sensitive path are still allowed to skip the ledger — add a trailer to the
 last commit on the branch:
 
 ```
-Ledger-Exempt: CHANGELOG.md — typo fix only, no behavior change
-Ledger-Exempt: ENGINE_CHANGELOG.md — test-only, no architecture change
+Ledger-Exempt: CHANGELOG.md typo fix only, no behavior change
+Ledger-Exempt: ENGINE_CHANGELOG.md test-only, no architecture change
 ```
 
 This is a visible, permanent, auditable choice recorded in git history — it

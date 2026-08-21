@@ -46,7 +46,7 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
     ),
 ]
 
-EXEMPT_TRAILER = re.compile(r"^Ledger-Exempt:\s*(\S+)\s*(?:—|-)\s*.+$", re.MULTILINE)
+EXEMPT_TRAILER = re.compile(r"^Ledger-Exempt:\s*(\S+)\s+\S.*$", re.MULTILINE)
 
 
 def _git(*args: str) -> str:
@@ -103,7 +103,7 @@ def main() -> int:
             continue
         failures.append(
             f"{ledger_file} was not updated, but this branch touches: {', '.join(sorted(sensitive_touched))}. "
-            f"Update {ledger_file}, or add a commit trailer 'Ledger-Exempt: {ledger_file} — <reason>'."
+            f"Update {ledger_file}, or add a commit trailer 'Ledger-Exempt: {ledger_file} <reason>'."
         )
 
     if failures:
