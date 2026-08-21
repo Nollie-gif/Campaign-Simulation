@@ -741,6 +741,101 @@ class CampaignSimulationPreflightTests(unittest.TestCase):
         for _cmd, kwargs in snapshot_calls:
             self.assertEqual(kwargs.get("cwd"), fake_snapshot)
 
+    def test_ledger_check_always_runs_with_list_missing_domains(self) -> None:
+        # No environment variable is ever set for the ledger subprocess -
+        # see tools/validate_change_ledger.py's exempted_ledgers() docstring
+        # for why that was rejected (a real CI bypass via workflow env).
+        # --list-missing-domains is the only, safe signalling mechanism.
+        def fake_run(command, **kwargs):
+            if any("validate_change_ledger.py" in str(part) for part in command):
+                self.assertIn("--list-missing-domains", command)
+                self.assertNotIn(
+                    "CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT", kwargs.get("env", {})
+                )
+                return completed(returncode=0)
+            return completed(returncode=0)
+
+        with (
+            mock.patch.object(preflight.subprocess, "run", side_effect=fake_run),
+            mock.patch.object(
+                preflight, "materialized_staged_tree",
+                return_value=contextlib.nullcontext(Path("fake-snapshot")),
+            ),
+        ):
+            preflight.run_required_checks(Path("real-root"), pending_exempt=["CHANGELOG.md some reason"])
+
+    def test_pending_exempt_only_covers_reported_missing_domains(self) -> None:
+        # The coverage decision must be exact: every MISSING-DOMAIN: line
+        # the checker reports must be named on --pending-exempt, or this
+        # must still fail closed - it must never treat "some are covered"
+        # as "good enough".
+        def fake_run(command, **kwargs):
+            if any("validate_change_ledger.py" in str(part) for part in command):
+                return completed(
+                    returncode=1,
+                    stdout=(
+                        "Change-ledger check failed:\n\n"
+                        "  - CHANGELOG.md was not updated...\n"
+                        "  - ENGINE_CHANGELOG.md was not updated...\n\n"
+                        "MISSING-DOMAIN:CHANGELOG.md\n"
+                        "MISSING-DOMAIN:ENGINE_CHANGELOG.md\n"
+                    ),
+                )
+            return completed(returncode=0)
+
+        with (
+            mock.patch.object(preflight.subprocess, "run", side_effect=fake_run),
+            mock.patch.object(
+                preflight, "materialized_staged_tree",
+                return_value=contextlib.nullcontext(Path("fake-snapshot")),
+            ),
+        ):
+            # Only one of the two reported domains is covered - must still
+            # raise, not silently pass.
+            with self.assertRaises(preflight.PreflightStop) as ctx:
+                preflight.run_required_checks(
+                    Path("real-root"), pending_exempt=["CHANGELOG.md some reason"]
+                )
+            self.assertEqual(ctx.exception.code, "CHECK-FAILED")
+
+        with (
+            mock.patch.object(preflight.subprocess, "run", side_effect=fake_run),
+            mock.patch.object(
+                preflight, "materialized_staged_tree",
+                return_value=contextlib.nullcontext(Path("fake-snapshot")),
+            ),
+        ):
+            # Both reported domains are covered - now it may pass.
+            preflight.run_required_checks(
+                Path("real-root"),
+                pending_exempt=["CHANGELOG.md some reason", "ENGINE_CHANGELOG.md some reason"],
+            )
+
+    def test_non_exemptable_ledger_failure_ignores_pending_exempt(self) -> None:
+        # A failure with no MISSING-DOMAIN: lines at all (the sane-domains /
+        # pattern-orphan / self-check categories) must never be treated as
+        # coverable, no matter what --pending-exempt claims.
+        def fake_run(command, **kwargs):
+            if any("validate_change_ledger.py" in str(part) for part in command):
+                return completed(
+                    returncode=1,
+                    stdout="Change-ledger check failed — the checker's own domains are not sane:\n\n  - ...\n",
+                )
+            return completed(returncode=0)
+
+        with (
+            mock.patch.object(preflight.subprocess, "run", side_effect=fake_run),
+            mock.patch.object(
+                preflight, "materialized_staged_tree",
+                return_value=contextlib.nullcontext(Path("fake-snapshot")),
+            ),
+        ):
+            with self.assertRaises(preflight.PreflightStop) as ctx:
+                preflight.run_required_checks(
+                    Path("real-root"), pending_exempt=["CHANGELOG.md some reason"]
+                )
+            self.assertEqual(ctx.exception.code, "CHECK-FAILED")
+
     def _valid_marker(
         self,
         *,

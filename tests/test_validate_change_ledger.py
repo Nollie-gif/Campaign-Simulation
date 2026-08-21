@@ -155,11 +155,15 @@ class CampaignSimulationChangeLedgerTests(unittest.TestCase):
                 self.assertIn("only 1 entries", problems[0])
 
     def test_pending_exempt_env_var_is_local_only_and_does_not_leak(self) -> None:
-        """Finding: the permanent Ledger-Exempt trailer cannot exist yet at
-        preflight time (preflight runs before `git commit`), so a genuine
-        first-time exemption could never produce COMMIT-READY through the
-        primary local path. The fix must be strictly local-only: absent by
-        default, and never confused with a real committed trailer."""
+        """Finding (P1, found by a second round of adversarial review after
+        the first fix landed): an earlier version of the pending-exemption
+        affordance read an environment variable directly inside this
+        CI-trusted, shared file - which is a real CI bypass, since a pull
+        request could set that variable for the change-ledger job by
+        editing .github/workflows/tests.yml, with no commit ever carrying
+        the required trailer. exempted_ledgers() must be a pure function of
+        committed Git history: no environment variable, however named, may
+        ever influence it."""
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             self._init_repo(repo)
@@ -168,23 +172,87 @@ class CampaignSimulationChangeLedgerTests(unittest.TestCase):
             self._fake_origin_main_at_head(repo)
 
             with mock.patch.object(vcl, "ROOT", repo):
-                saved = os.environ.pop("CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT", None)
-                try:
-                    self.assertEqual(vcl.exempted_ledgers(), set())
-
-                    os.environ["CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT"] = (
-                        "Ledger-Exempt: CHANGELOG.md test-only change"
-                    )
-                    self.assertEqual(vcl.exempted_ledgers(), {"CHANGELOG.md"})
-                finally:
-                    if saved is None:
-                        os.environ.pop("CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT", None)
-                    else:
-                        os.environ["CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT"] = saved
-
-                # Once unset again (the real CI environment never sets it),
-                # behavior returns to exactly the committed-trailer-only path.
                 self.assertEqual(vcl.exempted_ledgers(), set())
+
+                # Try every plausible bypass name a workflow-file edit might
+                # attempt, including the exact name this repository actually
+                # used and rejected. None may have any effect.
+                candidate_names = (
+                    "CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT",
+                    "LEDGER_EXEMPT",
+                    "PENDING_LEDGER_EXEMPT",
+                    "CHANGE_LEDGER_EXEMPT",
+                )
+                saved = {name: os.environ.pop(name, None) for name in candidate_names}
+                try:
+                    for name in candidate_names:
+                        os.environ[name] = "Ledger-Exempt: CHANGELOG.md fake exemption via workflow env"
+                    self.assertEqual(
+                        vcl.exempted_ledgers(), set(),
+                        "no environment variable may ever grant an exemption",
+                    )
+                finally:
+                    for name, value in saved.items():
+                        if value is None:
+                            os.environ.pop(name, None)
+                        else:
+                            os.environ[name] = value
+
+    def test_list_missing_domains_flag_reports_only_the_exemptable_category(self) -> None:
+        """The --list-missing-domains flag (the actual, safe mechanism
+        preflight_commit.py uses to predict a pending exemption) must never
+        change the exit code, and must only ever emit MISSING-DOMAIN: lines
+        for the one waivable failure category - never for the unconditional,
+        non-exemptable ones (sane-domains / pattern-orphan / self-check)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._init_repo(repo)
+            # One tracked file per real LEDGER_DOMAINS pattern glob, so
+            # check_pattern_coverage() (an earlier, unconditional gate) does
+            # not itself fail first and mask the category under test.
+            self._write(repo, "CHANGELOG.md", "base\n")
+            self._write(repo, "ENGINE_CHANGELOG.md", "base\n")
+            self._write(repo, "AGENT_HANDOFF.md", "base\n")
+            self._write(repo, "src/main.py", "base\n")
+            self._write(repo, "schemas/x.json", "{}\n")
+            self._write(repo, ".github/workflows/tests.yml", "x\n")
+            self._write(repo, "tools/x.py", "x\n")
+            self._write(repo, "scripts/x.py", "x\n")
+            self._write(repo, ".github/copilot-instructions.md", "x\n")
+            self._write(repo, "INSTALLATION_GUIDE.md", "x\n")
+            self._write(repo, "scripts/preflight_commit.py", "x\n")
+            self._write(repo, "scripts/install_preflight_hook.py", "x\n")
+            self._write(repo, ".githooks/pre-commit", "x\n")
+            self._commit(repo, "init")
+            self._fake_origin_main_at_head(repo)
+
+            self._write(repo, "src/main.py", "sensitive change, no changelog\n")
+            self._commit(repo, "sensitive change without ledger update")
+
+            script = repo / "run_checker.py"
+            script.write_text(
+                "import sys\nsys.path.insert(0, %r)\n"
+                "import importlib.util\n"
+                "spec = importlib.util.spec_from_file_location('vcl', %r)\n"
+                "vcl = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(vcl)\n"
+                "vcl.ROOT = %r\n"
+                "sys.exit(vcl.main(sys.argv[1:]))\n"
+                % (str(MODULE_PATH.parent), str(MODULE_PATH), str(repo)),
+                encoding="utf-8",
+            )
+
+            without_flag = subprocess.run(
+                [sys.executable, str(script)], cwd=repo, capture_output=True, text=True
+            )
+            with_flag = subprocess.run(
+                [sys.executable, str(script), "--list-missing-domains"],
+                cwd=repo, capture_output=True, text=True,
+            )
+            self.assertEqual(without_flag.returncode, with_flag.returncode)
+            self.assertEqual(without_flag.returncode, 1)
+            self.assertNotIn("MISSING-DOMAIN:", without_flag.stdout)
+            self.assertIn("MISSING-DOMAIN:CHANGELOG.md", with_flag.stdout)
 
     def test_ci_like_state_is_unaffected_by_any_of_the_three_fixes(self) -> None:
         """A clean checkout (nothing staged, index == HEAD, no pending-exempt

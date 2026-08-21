@@ -740,22 +740,21 @@ def run_required_checks(root: Path, pending_exempt: Sequence[str] = ()) -> None:
     # (merge-base, diff, log against origin/main) that the deliberately
     # .git-less materialized snapshot above cannot provide. Run it directly
     # against the real repository root instead of inside that snapshot.
-    if pending_exempt:
-        # The permanent, CI-enforced exemption mechanism is a commit-message
-        # trailer, but that message does not exist yet at preflight time -
-        # preflight runs *before* `git commit`. Without this, a legitimate
-        # first-time exemption can never produce COMMIT-READY, because
-        # nothing has been committed yet for the ledger check's git-log scan
-        # to find (found by adversarial review, not theoretical). This env
-        # var only ever affects this local, non-authoritative preflight
-        # prediction; CI never sets it, and CI's own exempted_ledgers() scan
-        # still requires the real trailer to be present in the actual
-        # committed message, or CI fails regardless of what preflight said.
-        child_env["CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT"] = "\n".join(
-            f"Ledger-Exempt: {entry}" for entry in pending_exempt
-        )
+    #
+    # No environment variable is used to signal a pending exemption to that
+    # script. An earlier version did exactly that, and adversarial review
+    # correctly flagged it as a real CI bypass: that same file is what CI
+    # executes (from a trusted origin/main copy) for the required
+    # change-ledger check, so anything it reads from the environment is
+    # something a pull request could set for it, e.g. by editing
+    # .github/workflows/tests.yml to inject the variable into that job. The
+    # prediction logic instead lives entirely here, by asking the script for
+    # a machine-readable listing of *which* domains it is missing
+    # (--list-missing-domains, which never changes its own exit code) and
+    # only ever accepting that as satisfied when every reported domain is
+    # explicitly named on this command line.
     ledger_result = subprocess.run(
-        [sys.executable, "tools/validate_change_ledger.py"],
+        [sys.executable, "tools/validate_change_ledger.py", "--list-missing-domains"],
         cwd=root,
         check=False,
         capture_output=True,
@@ -765,14 +764,30 @@ def run_required_checks(root: Path, pending_exempt: Sequence[str] = ()) -> None:
         env=child_env,
     )
     if ledger_result.returncode:
-        diagnostic = (ledger_result.stderr or ledger_result.stdout).strip()
-        if diagnostic:
-            print(diagnostic, file=sys.stderr)
-        raise PreflightStop(
-            "CHECK-FAILED",
-            "Change ledger validation failed. Resolve it before committing.",
-        )
-    print("CHECK-PASS: Change ledger validation")
+        stdout = ledger_result.stdout or ""
+        missing = [
+            line.split(":", 1)[1]
+            for line in stdout.splitlines()
+            if line.startswith("MISSING-DOMAIN:")
+        ]
+        pending_files = {entry.split(None, 1)[0] for entry in pending_exempt if entry.strip()}
+        if missing and set(missing) <= pending_files:
+            print(
+                "CHECK-PASS: Change ledger validation "
+                f"(pending exemption predicted for: {', '.join(sorted(missing))} - "
+                "the real commit MUST carry the matching 'Ledger-Exempt:' trailer(s) "
+                "verbatim, or CI will fail regardless of this local prediction)"
+            )
+        else:
+            diagnostic = (ledger_result.stderr or stdout).strip()
+            if diagnostic:
+                print(diagnostic, file=sys.stderr)
+            raise PreflightStop(
+                "CHECK-FAILED",
+                "Change ledger validation failed. Resolve it before committing.",
+            )
+    else:
+        print("CHECK-PASS: Change ledger validation")
 
 
 def run_preflight(root: Path, pending_exempt: Sequence[str] = ()) -> None:

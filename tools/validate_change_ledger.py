@@ -55,23 +55,26 @@ theoretical, and none of them affect the CI-enforced boundary above):
   this file is caught immediately during local preflight instead of only
   after it lands. Identical to `HEAD:path` in CI, where the index always
   matches HEAD.
-- `CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT` lets local preflight predict
-  a `Ledger-Exempt:` trailer that does not exist yet (the commit carrying it
-  hasn't been made at preflight time). This is local-only and
-  non-authoritative: CI never sets it, and CI still requires the identical
-  real trailer in the actual committed message regardless of what local
-  preflight predicted.
-- None of the three notes above change what CI enforces — CI has no staged
-  state (index already equals HEAD) and never sets the pending-exemption
-  variable. They fix local preflight giving an incorrect or unusable
-  prediction of what CI will do, not a gap in what CI itself does.
+- Predicting a not-yet-committed `Ledger-Exempt:` trailer (so a genuine
+  first-time exemption isn't blocked by preflight running before the
+  commit that would carry it exists) is handled entirely inside
+  scripts/preflight_commit.py, by parsing this script's own `--list-
+  missing-domains` output. This file itself has zero awareness of any
+  pending/predicted exemption and reads no environment variable for this
+  purpose - a first version did read one, and adversarial review correctly
+  flagged that as a real CI bypass (a PR could set that variable for the
+  `change-ledger` job via `.github/workflows/tests.yml` and fake an
+  exemption CI would trust). See `exempted_ledgers()`'s docstring.
+- None of the notes above change what CI enforces — CI has no staged state
+  (index already equals HEAD) and never passes `--list-missing-domains`.
+  They fix local preflight giving an incorrect or unusable prediction of
+  what CI will do, not a gap in what CI itself does.
 """
 
 from __future__ import annotations
 
 import ast
 import fnmatch
-import os
 import re
 import subprocess
 import sys
@@ -166,6 +169,21 @@ def changed_paths() -> set[str]:
 
 
 def exempted_ledgers() -> set[str]:
+    """Only ever reads real, already-committed trailers. Deliberately never
+    reads an environment variable or any other ambient input: this file is
+    executed unmodified by CI from a trusted `origin/main` copy (see module
+    docstring), so anything it reads from the process environment is
+    something a pull request could set for it — e.g. by editing
+    `.github/workflows/tests.yml` to inject a fake pending-exemption
+    variable into the `change-ledger` job's env. An earlier version of the
+    local-only pending-exemption affordance (see
+    scripts/preflight_commit.py --pending-exempt) did exactly that and was
+    caught by adversarial review before merge: it was a real CI bypass, not
+    a theoretical one, once it reached `origin/main`. That affordance is
+    implemented entirely inside preflight_commit.py instead now, by parsing
+    this script's own reported failures - this file has no awareness of it
+    at all.
+    """
     base = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
@@ -174,16 +192,7 @@ def exempted_ledgers() -> set[str]:
         return set()
     merge_base = base.stdout.strip()
     log = _git("log", f"{merge_base}..HEAD", "--format=%B")
-    exempt = {m.group(1) for m in EXEMPT_TRAILER.finditer(log)}
-    # Local-only, non-authoritative: a preflight run predicting a trailer it
-    # is about to commit (see scripts/preflight_commit.py --pending-exempt),
-    # so a first-time legitimate exemption isn't blocked by the fact that
-    # the commit carrying its trailer doesn't exist yet at preflight time.
-    # CI never sets this variable, so this is a no-op there; CI always
-    # re-derives the exemption from the real committed trailer above.
-    pending = os.environ.get("CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT", "")
-    exempt |= {m.group(1) for m in EXEMPT_TRAILER.finditer(pending)}
-    return exempt
+    return {m.group(1) for m in EXEMPT_TRAILER.finditer(log)}
 
 
 def matches_any(path: str, patterns: list[str]) -> bool:
@@ -291,7 +300,16 @@ def check_committed_ledger_script_is_sane(diff: set[str]) -> list[str]:
     return []
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    # Purely additive reporting mode: never changes the pass/fail exit code
+    # below, only what gets printed on the one exemptable failure category.
+    # See exempted_ledgers()'s docstring for why this exists instead of an
+    # environment variable, and scripts/preflight_commit.py for the only
+    # consumer. Because it cannot flip a failing exit code to 0, a workflow
+    # passing this flag to the CI invocation gains nothing.
+    list_missing_domains = "--list-missing-domains" in argv
+
     sanity_problems = assert_domains_sane()
     if sanity_problems:
         print("Change-ledger check failed — the checker's own domains are not sane:\n")
@@ -324,6 +342,7 @@ def main() -> int:
 
     exempt = exempted_ledgers()
     failures: list[str] = []
+    missing_domains: list[str] = []
 
     for ledger_file, patterns in LEDGER_DOMAINS:
         sensitive_touched = [p for p in diff if matches_any(p, patterns) and p != ledger_file]
@@ -333,6 +352,7 @@ def main() -> int:
             continue
         if ledger_file in exempt:
             continue
+        missing_domains.append(ledger_file)
         failures.append(
             f"{ledger_file} was not updated, but this branch touches: {', '.join(sorted(sensitive_touched))}. "
             f"Update {ledger_file}, or add a commit trailer 'Ledger-Exempt: {ledger_file} <reason>'."
@@ -341,6 +361,10 @@ def main() -> int:
     if failures:
         print("Change-ledger check failed:\n")
         print("\n".join(f"  - {f}" for f in failures))
+        if list_missing_domains:
+            print()
+            for ledger_file in missing_domains:
+                print(f"MISSING-DOMAIN:{ledger_file}")
         return 1
     print("Change-ledger check passed.")
     return 0
