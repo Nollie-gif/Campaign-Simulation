@@ -13,11 +13,59 @@ Before making any change:
 1. Read the root [`README.md`](README.md) for the current framework map.
 2. Read [`INSTALLATION_GUIDE.md`](INSTALLATION_GUIDE.md) — it is the
    authoritative Git workflow (Protected Main Rule, review-only requests).
-3. If the change touches gameplay-facing onboarding or first-boot behavior,
-   also read [`docs/ONBOARDING.md`](docs/ONBOARDING.md) and
-   [`docs/safety-installation/README.md`](docs/safety-installation/README.md).
-4. Inspect only the subsystem files/tests relevant to the request. Do not
+3. Install and use Flight Control (below) for any change to this repository's
+   own code, schema, docs, or CI.
+4. If the request is instead about a DM's own campaign runtime — building or
+   changing *their* gameplay mechanics in *their own* campaign data
+   repository, not this framework's source — see "Flight Control vs.
+   Experiment Safety" below before doing anything; that is a different
+   system for a different repository, not a substitute cold-start path here.
+5. Inspect only the subsystem files/tests relevant to the request. Do not
    recursively ingest the whole repository.
+
+## Flight Control — this repository's local engineering guardrail
+
+Every normal engineering commit to *this* repository (Campaign-Simulation's
+own source) goes through a deterministic local guardrail, adapted from the
+mechanism proven in Mission10-Simulation-Sequel and The-Test:
+
+1. Work on a fresh branch prefixed with one of `agent/`, `feature/`, `fix/`,
+   `hardening/`, `test/`, `docs/` (matching `INSTALLATION_GUIDE.md`'s
+   existing convention — not the single `agent/` prefix those other
+   repositories use).
+2. Enable the versioned hook once per clone:
+   `python scripts/install_preflight_hook.py`.
+3. Stage exactly the intended files, then
+   `python scripts/preflight_commit.py`. Continue only on `COMMIT-READY`.
+4. Commit normally — the pre-commit hook independently re-verifies the
+   marker still matches the exact branch/HEAD/origin-main/staged diff.
+5. Push, open a PR, and let the independent CI (which reruns the same
+   checks from a clean checkout, not from local trust) gate the merge.
+
+Flight Control never commits, pushes, or merges by itself, and never
+performs any campaign-simulation runtime mutation
+(`commit_checkpoint`/`commit_manifest`) — see
+`tests/test_preflight_commit.py::test_guardrail_has_no_product_mutation_commands`.
+
+### Flight Control vs. Experiment Safety — different repositories, not competing rules
+
+- **Flight Control** (above) governs engineering changes to *this*
+  repository — the reusable framework's own code, schema, docs, CI.
+- **Experiment Safety** (`docs/safety-installation/`) governs a *DM's own,
+  separate campaign runtime/data repository* — protecting *their* gameplay
+  experiments and campaign progress when they use this framework to play.
+  It is optional, consent-driven, and installs into the DM's runtime, not
+  into this repository.
+- A request to "build or change" something is **not**, by itself, enough to
+  tell which one applies — classify by *which repository the change
+  targets* first. An engineering request aimed at this framework's own
+  source must use Flight Control even if it is phrased the way
+  `docs/safety-installation/LOTS_SAFE_BUILD_PROMPT.md` phrases a gameplay
+  request. Experiment-branch/checkpoint conventions belong to a DM's
+  runtime and must not leak into this repository's own PR workflow, and
+  Flight Control's branch/PR/CI conventions must not be assumed to apply
+  inside a DM's separate runtime repository, which may have none of this
+  tooling installed.
 
 ## Authority
 
@@ -82,11 +130,24 @@ insufficient: a PR could still legitimately *exempt* the resulting
 ledger requirement with a trailer and merge its weakened file content
 anyway. `check_committed_ledger_script_is_sane()` closes that specific
 gap by independently inspecting the PR's *own* proposed file (via `git
-show`, parsed with `ast`, never executed) and is not waivable by any
-exemption. None of this stops an already-trusted committer from
-weakening `main`'s copy across two separately-merged PRs — that boundary
-is branch protection and human review, not this script, and no script
-can fully protect against its own maintainer.
+show :path` — the index, not `HEAD:path`, so a staged-but-uncommitted
+weakening is caught immediately rather than only after it lands — parsed
+with `ast`, never executed) and is not waivable by any exemption. None of
+this stops an already-trusted committer from weakening `main`'s copy
+across two separately-merged PRs — that boundary is branch protection and
+human review, not this script, and no script can fully protect against
+its own maintainer.
+
+Local preflight itself (`scripts/preflight_commit.py`) is a courtesy for
+a cooperating committer, not a hardened boundary: anyone with write
+access to their own working tree can edit it, edit `.githooks/pre-commit`,
+or run `git commit --no-verify`. A local COMMIT-READY is a fast local echo
+of what CI will independently re-check, not a security attestation — the
+real, non-bypassable boundary is always CI's trusted-copy execution plus
+the checks above. (Found by a second round of automated pre-merge review
+against PR #21; see `ENGINE_CHANGELOG.md`'s "Change-ledger checker
+hardening" entry for the three concrete local-only bugs that review also
+found and fixed — none of which affected CI.)
 
 ## Verification
 

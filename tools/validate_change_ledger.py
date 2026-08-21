@@ -35,12 +35,40 @@ Self-defense notes (found by adversarial review, not theoretical):
   copy for every subsequent PR.
 - The real fix is `check_committed_ledger_script_is_sane()`: when
   `tools/validate_change_ledger.py` itself is in the diff, it reads the
-  pull request's *own* committed version (`git show HEAD:...`, not the
-  overwritten working copy) with `ast.parse` — never executed — and
-  independently counts `LEDGER_DOMAINS` entries against this trusted
-  script's own `MINIMUM_DOMAIN_COUNT`. This check is not exemptable and
-  does not depend on what the PR's version of the script would have
+  pull request's *own* index version (`git show :...`, not the overwritten
+  working copy, and not HEAD — see below) with `ast.parse` — never
+  executed — and independently counts `LEDGER_DOMAINS` entries against this
+  trusted script's own `MINIMUM_DOMAIN_COUNT`. This check is not exemptable
+  and does not depend on what the PR's version of the script would have
   decided about itself.
+
+Local-preflight-specific notes (a second round of adversarial review, found
+against PR #21 by an automated reviewer before merge — real findings, not
+theoretical, and none of them affect the CI-enforced boundary above):
+- `changed_paths()` diffs the merge-base against the *prospective* tree
+  (`git write-tree`) rather than HEAD or a union of separately-collected
+  path lists — see that function's docstring for the specific scenario this
+  closes (a staged revert of an already-committed ledger update, alongside
+  a new unrelated sensitive change, could otherwise look satisfied).
+- `check_committed_ledger_script_is_sane()` reads the index (`git show
+  :path`), not `HEAD:path`, so a *staged-but-not-yet-committed* weakening of
+  this file is caught immediately during local preflight instead of only
+  after it lands. Identical to `HEAD:path` in CI, where the index always
+  matches HEAD.
+- Predicting a not-yet-committed `Ledger-Exempt:` trailer (so a genuine
+  first-time exemption isn't blocked by preflight running before the
+  commit that would carry it exists) is handled entirely inside
+  scripts/preflight_commit.py, by parsing this script's own `--list-
+  missing-domains` output. This file itself has zero awareness of any
+  pending/predicted exemption and reads no environment variable for this
+  purpose - a first version did read one, and adversarial review correctly
+  flagged that as a real CI bypass (a PR could set that variable for the
+  `change-ledger` job via `.github/workflows/tests.yml` and fake an
+  exemption CI would trust). See `exempted_ledgers()`'s docstring.
+- None of the notes above change what CI enforces — CI has no staged state
+  (index already equals HEAD) and never passes `--list-missing-domains`.
+  They fix local preflight giving an incorrect or unusable prediction of
+  what CI will do, not a gap in what CI itself does.
 """
 
 from __future__ import annotations
@@ -63,6 +91,7 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
             "schemas/*",
             ".github/workflows/*",
             "tools/*",
+            "scripts/*",
         ],
     ),
     (
@@ -72,6 +101,7 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
             "schemas/*",
             ".github/workflows/*",
             "tools/*",
+            "scripts/*",
         ],
     ),
     (
@@ -79,6 +109,9 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
         [
             ".github/copilot-instructions.md",
             "INSTALLATION_GUIDE.md",
+            "scripts/preflight_commit.py",
+            "scripts/install_preflight_hook.py",
+            ".githooks/*",
         ],
     ),
 ]
@@ -99,6 +132,22 @@ def tracked_files() -> list[str]:
 
 
 def changed_paths() -> set[str]:
+    """Diff the merge-base against the *prospective* tree - what would exist
+    if everything currently staged were committed right now - rather than
+    against HEAD or a union of separately-collected path name lists.
+
+    `git write-tree` writes the current index as a real tree object without
+    creating a commit. In CI nothing is ever staged beyond HEAD, so this
+    tree is identical to HEAD's tree and behavior there is unchanged. Locally,
+    it reflects staged adds *and* staged reverts correctly, which a union of
+    "paths touched in committed history" + "paths touched in the staged
+    diff" cannot: adversarial review found that union could let an earlier,
+    already-committed ledger update paper over a later staged change that
+    reverts that very ledger update while introducing a new, unrelated
+    sensitive change in the same breath - the union still "sees" the ledger
+    file as touched, even though the tree about to be committed would not
+    actually carry that update relative to the merge base.
+    """
     base = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
@@ -106,11 +155,35 @@ def changed_paths() -> set[str]:
     if base.returncode != 0:
         return set()
     merge_base = base.stdout.strip()
-    output = _git("diff", "--name-only", f"{merge_base}..HEAD")
-    return {line for line in output.splitlines() if line}
+    tree = subprocess.run(
+        ["git", "write-tree"], cwd=ROOT, capture_output=True, text=True,
+    )
+    if tree.returncode != 0:
+        # Unmerged/conflicted index or similar unusual state: fall back to
+        # the committed-only comparison rather than fail outright.
+        committed = _git("diff", "--name-only", f"{merge_base}..HEAD")
+        return {line for line in committed.splitlines() if line}
+    prospective_tree = tree.stdout.strip()
+    diff = _git("diff", "--name-only", merge_base, prospective_tree)
+    return {line for line in diff.splitlines() if line}
 
 
 def exempted_ledgers() -> set[str]:
+    """Only ever reads real, already-committed trailers. Deliberately never
+    reads an environment variable or any other ambient input: this file is
+    executed unmodified by CI from a trusted `origin/main` copy (see module
+    docstring), so anything it reads from the process environment is
+    something a pull request could set for it — e.g. by editing
+    `.github/workflows/tests.yml` to inject a fake pending-exemption
+    variable into the `change-ledger` job's env. An earlier version of the
+    local-only pending-exemption affordance (see
+    scripts/preflight_commit.py --pending-exempt) did exactly that and was
+    caught by adversarial review before merge: it was a real CI bypass, not
+    a theoretical one, once it reached `origin/main`. That affordance is
+    implemented entirely inside preflight_commit.py instead now, by parsing
+    this script's own reported failures - this file has no awareness of it
+    at all.
+    """
     base = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
@@ -191,17 +264,27 @@ def _count_ledger_domains_in_source(source: str) -> int | None:
 
 def check_committed_ledger_script_is_sane(diff: set[str]) -> list[str]:
     """Independent of assert_domains_sane(): that function checks the
-    trusted executing copy; this checks what the PR actually proposes to
+    trusted executing copy; this checks what the change actually proposes to
     commit, by reading it from Git rather than the working tree (which CI
-    has already overwritten) or executing it. Not waivable by exemption."""
+    has already overwritten) or executing it. Not waivable by exemption.
+
+    Reads the *index* (`git show :path`), not `HEAD:path`. In CI the index
+    always matches HEAD (a clean checkout, nothing staged), so this is
+    unchanged there. Locally, `diff` (see changed_paths()) can already be
+    "yes, SELF_PATH is part of the prospective change" purely from a staged-
+    but-not-yet-committed edit; reading HEAD in that situation inspects the
+    old, pre-staged content and misses a staged weakening entirely until
+    after it is already committed - found by adversarial review, not
+    theoretical.
+    """
     if SELF_PATH not in diff:
         return []
     result = subprocess.run(
-        ["git", "show", f"HEAD:{SELF_PATH}"],
+        ["git", "show", f":{SELF_PATH}"],
         cwd=ROOT, capture_output=True, text=True,
     )
     if result.returncode != 0:
-        return [f"{SELF_PATH} is in the diff but could not be read from HEAD for inspection."]
+        return [f"{SELF_PATH} is in the diff but could not be read from the index for inspection."]
     count = _count_ledger_domains_in_source(result.stdout)
     if count is None:
         return [
@@ -217,7 +300,16 @@ def check_committed_ledger_script_is_sane(diff: set[str]) -> list[str]:
     return []
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    # Purely additive reporting mode: never changes the pass/fail exit code
+    # below, only what gets printed on the one exemptable failure category.
+    # See exempted_ledgers()'s docstring for why this exists instead of an
+    # environment variable, and scripts/preflight_commit.py for the only
+    # consumer. Because it cannot flip a failing exit code to 0, a workflow
+    # passing this flag to the CI invocation gains nothing.
+    list_missing_domains = "--list-missing-domains" in argv
+
     sanity_problems = assert_domains_sane()
     if sanity_problems:
         print("Change-ledger check failed — the checker's own domains are not sane:\n")
@@ -250,6 +342,7 @@ def main() -> int:
 
     exempt = exempted_ledgers()
     failures: list[str] = []
+    missing_domains: list[str] = []
 
     for ledger_file, patterns in LEDGER_DOMAINS:
         sensitive_touched = [p for p in diff if matches_any(p, patterns) and p != ledger_file]
@@ -259,6 +352,7 @@ def main() -> int:
             continue
         if ledger_file in exempt:
             continue
+        missing_domains.append(ledger_file)
         failures.append(
             f"{ledger_file} was not updated, but this branch touches: {', '.join(sorted(sensitive_touched))}. "
             f"Update {ledger_file}, or add a commit trailer 'Ledger-Exempt: {ledger_file} <reason>'."
@@ -267,6 +361,10 @@ def main() -> int:
     if failures:
         print("Change-ledger check failed:\n")
         print("\n".join(f"  - {f}" for f in failures))
+        if list_missing_domains:
+            print()
+            for ledger_file in missing_domains:
+                print(f"MISSING-DOMAIN:{ledger_file}")
         return 1
     print("Change-ledger check passed.")
     return 0

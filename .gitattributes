@@ -1,0 +1,7 @@
+# .githooks/pre-commit is executed as a POSIX shell script and is also
+# checked byte-for-byte against a pinned SHA-256 identity in
+# scripts/preflight_commit.py. CRLF line endings break its "#!/bin/sh\r"
+# shebang on POSIX shells and are rejected (not silently accepted) by that
+# identity check. Pin the whole hooks directory to LF so no checkout -
+# Windows core.autocrlf=true included - can produce CRLF here.
+.githooks/* text eol=lf

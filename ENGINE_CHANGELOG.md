@@ -12,6 +12,188 @@ anything before that date.
 
 ---
 
+## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
+
+**Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but
+blocked from merge by the branch ruleset's `required_review_thread_resolution`
+rule: an automated reviewer (`chatgpt-codex-connector`) had left 5 unresolved
+P2 threads on `tools/validate_change_ledger.py` and `scripts/preflight_commit.py`.
+Per explicit instruction, these were investigated and judged on their merits
+rather than dismissed to unblock the merge, and `--admin` was not used.
+
+**Findings and disposition:**
+1. **Fixed.** `changed_paths()` compared a union of "paths touched in
+   committed history" and "paths touched in the staged diff" — an
+   already-committed ledger update could paper over a later staged revert of
+   that same update alongside a new, unrelated sensitive change. Replaced
+   with a diff of the merge-base against the *prospective* tree
+   (`git write-tree`, no commit created), which correctly nets out reverts.
+   Identical behavior in CI (nothing is ever staged beyond HEAD there, so the
+   prospective tree equals HEAD's tree).
+2. **Fixed.** `check_committed_ledger_script_is_sane()` read
+   `HEAD:tools/validate_change_ledger.py` — a self-weakening of this file
+   that was staged but not yet committed (while the working tree happened to
+   show safe content) was invisible until after it actually landed. Now
+   reads the index (`git show :path`), which is exactly what `git commit`
+   (without `-a`) is about to commit. Identical to `HEAD:path` in CI, where
+   the index always equals HEAD.
+3. **Fixed (usability, not a security gap) — then found to have introduced
+   a real one, and fixed again.** The `Ledger-Exempt:` trailer is read from
+   committed commit messages, but preflight runs *before* `git commit` — a
+   genuine first-time exemption could never produce COMMIT-READY through
+   the primary local path, since the commit carrying the trailer doesn't
+   exist yet. The first fix added `scripts/preflight_commit.py
+   --pending-exempt "FILE REASON"`, which set
+   `CAMPAIGN_SIMULATION_PENDING_LEDGER_EXEMPT` and had
+   `exempted_ledgers()` in `tools/validate_change_ledger.py` read it. A
+   second round of automated review (after this fix was pushed) correctly
+   flagged that as a **P1 CI bypass**: `validate_change_ledger.py` is the
+   exact file CI executes for the required `change-ledger` check, so any
+   environment variable it reads is one a pull request could set for that
+   job — e.g. by editing `.github/workflows/tests.yml` — and merge with no
+   commit ever carrying the real trailer. Re-fixed by removing all
+   environment-variable awareness from `validate_change_ledger.py` (it is
+   now, again, a pure function of committed Git history) and moving the
+   prediction entirely into `preflight_commit.py`: `validate_change_ledger.py`
+   gained a `--list-missing-domains` flag that only ever adds
+   machine-readable `MISSING-DOMAIN:` lines to its output on the one
+   waivable failure category, and **never changes its own exit code** —
+   so a workflow passing this flag gains nothing. `preflight_commit.py`
+   parses those lines and only treats the check as locally satisfied when
+   *every* reported domain is explicitly named on `--pending-exempt`; any
+   other failure category, or any uncovered domain, still fails closed.
+4. **Documented, not changed.** Two findings (self-referential trust: a
+   locally-modified `preflight_commit.py`/`validate_change_ledger.py` run
+   directly, not from a trusted copy, could lie to itself) describe a true
+   and irreducible property of any local-only gate — there is no local root
+   of trust that can stop someone from lying to their own working tree. This
+   was already the documented design (the real, non-bypassable boundary is
+   CI's trusted-copy-from-`origin/main` execution plus the
+   non-exemptable self-check above). Strengthened `preflight_commit.py`'s
+   module docstring to state this explicitly rather than leaving it implicit.
+
+**Verification:** all fixes (including the re-fix of finding 3) were
+adversarially reproduced by hand before being accepted (staged a
+revert-while-sensitive-change scenario and confirmed the old union logic
+would have wrongly passed it while the new logic correctly fails it; staged
+a self-weakening with disk reverted to safe content and confirmed the old
+`HEAD`-read would have missed it while the new index-read catches it;
+confirmed no candidate environment-variable name, including the exact one
+this repository actually shipped and then rejected, has any effect on
+`exempted_ledgers()`; confirmed `--list-missing-domains` never changes the
+exit code and only reports the one waivable category). All scenarios are
+now permanent regression coverage in `tests/test_validate_change_ledger.py`
+(disposable temp-directory git repos via
+`unittest.mock.patch.object(vcl, "ROOT", ...)`, not the real repository)
+and in `tests/test_preflight_commit.py` (the coverage-decision logic:
+partial coverage still fails, full coverage passes, non-exemptable
+categories always fail regardless of `--pending-exempt`). Full suite: 139
+tests, `OK (skipped=4)`.
+
+**Compatibility:** no change to what CI enforces or to any already-recorded
+`Ledger-Exempt:` trailer's meaning.
+
+---
+
+## 2026-08-21 — Flight Control Extraction
+
+**Category:** Repository continuity / local engineering guardrail
+**Compatibility:** Additive only; no runtime/API behavior changed.
+
+### Why
+
+The Protected Main Rule (`INSTALLATION_GUIDE.md`) and the branch ruleset
+enforce the *server-side* half of the guarded engineering path (PR
+required, CI required, no bypass). Nothing enforced the *local* half — a
+fresh branch, exact staged scope, passing checks — before a commit was
+even made; that depended entirely on an agent remembering to do it, the
+same class of gap the change-ledger mechanism closed for durable records.
+Mission10-Simulation-Sequel and The-Test had already built, used in
+production, and adversarially hardened exactly this mechanism (Flight
+Control); porting it here closes the same gap without re-inventing it.
+
+### Change
+
+- Added `scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`,
+  `.githooks/pre-commit` (content-pinned via SHA-256, LF-pinned via
+  `.gitattributes`), and the full adversarial test suite
+  (`tests/test_preflight_commit.py`, `tests/test_install_preflight_hook.py`
+  — 74 tests total, all passing on this platform).
+- **Not a blind copy** — three deliberate adaptations, not cosmetic
+  renames:
+  - `ALLOWED_BRANCH_PREFIX` ("agent/" only) generalized to
+    `ALLOWED_BRANCH_PREFIXES`, matching this repository's own
+    already-documented `INSTALLATION_GUIDE.md` convention
+    (`feature/`, `fix/`, `hardening/`, `test/`, `docs/`, `agent/`) instead
+    of forcing every future branch onto a foreign single-prefix rule.
+  - `PROTECTED_BRANCHES` narrowed to `{main, master}` — no
+    `runtime-published`/`runtime-save-staging`-style branches exist here.
+  - `run_required_checks()` restructured: the three pure-file-content
+    checks (unit tests, blank-template validation, artifact-manifest
+    validation) run inside the isolated, `.git`-less materialized
+    snapshot exactly as Mission10's version does; `tools/validate_change_ledger.py`
+    runs separately against the real repository root, because it
+    inherently needs live Git history (`merge-base`/`diff`/`log` against
+    `origin/main`) that a git-less snapshot cannot provide — a
+    distinction Mission10's single-validator design never had to make.
+- **A real bug found only by actually running the ported checks against
+  real content, not by inspection:** the materialized snapshot had no
+  `PYTHONPATH`, so a child process's own subprocess (e.g.
+  `test_concurrent_identifiers_integration.py`, which shells out to a
+  fresh `python -c "from campaign_simulation..."`) resolved
+  `campaign_simulation` via whatever editable install happened to exist
+  in the outer environment instead of the snapshot's own materialized
+  `src/` — silently validating the live working tree rather than the
+  actually-staged content, which defeats the entire point of
+  materializing a snapshot. Fixed by prepending `{snapshot}/src` to the
+  child environment's `PYTHONPATH`. Mission10 has no equivalent
+  subprocess-spawning test, so this gap did not exist to find there.
+- Forbidden-token self-purity test
+  (`test_guardrail_has_no_product_mutation_commands`) adapted to this
+  repository's actual mutation surface (`commit_checkpoint(`,
+  `commit_manifest(`, `validate_gated_checkpoint(`) instead of Mission10's
+  Supabase/WDR-specific function names, which do not exist here.
+- Extended `tools/validate_change_ledger.py`'s domains: `scripts/*` added
+  to the `CHANGELOG.md`/`ENGINE_CHANGELOG.md` sensitive-path set (this
+  repository's first real use of a `scripts/` directory), and
+  `scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`,
+  `.githooks/*` added to the `AGENT_HANDOFF.md` domain — matching the
+  narrower, more precise pattern already used for The-Test and Mission10
+  after the Council review.
+- Resolved the classification ambiguity between Flight Control (this
+  repository's own engineering) and the pre-existing Experiment Safety
+  installation (`docs/safety-installation/`, which protects a *DM's own,
+  separate* campaign runtime): added an explicit "which repository does
+  this change target" cross-reference to `AGENT_HANDOFF.md`,
+  `docs/safety-installation/README.md`, and `LOTS_SAFE_BUILD_PROMPT.md`,
+  without weakening either system or merging their scopes.
+
+### Compatibility / recovery
+
+- No existing test, template, schema, or public API changed.
+- Flight Control is local-only and additive: a clone without the hook
+  installed still works exactly as before (CI remains the independent
+  backstop regardless of local guardrail state).
+
+### Verification
+
+- All 74 ported tests pass on this platform (Windows).
+- Live, non-mocked adversarial tests in an isolated worktree: a
+  branch-name outside `ALLOWED_BRANCH_PREFIXES` is rejected
+  (`NON-FEATURE-BRANCH`); staged content tampered with after a successful
+  `COMMIT-READY` is rejected at the real `git commit` boundary
+  (`PREFLIGHT-MARKER-MISMATCH`) by the actually-installed hook, not a
+  mock. Direct-commit-on-`main` and stale-branch rejection are covered by
+  the ported unit/integration suite (`test_protected_branch_is_rejected`,
+  `test_stale_branch_fails_closed`,
+  `test_git_replace_ref_does_not_fake_freshness_against_origin_main` — the
+  last against a real, disposable Git repository, not a mock) rather than
+  re-proven live here, since `main` does not carry Flight Control until
+  this change merges into it; full live re-verification against the
+  merged, real `main` is planned as part of fresh-clone verification.
+
+---
+
 ## 2026-08-21 — Change-ledger self-defense hardening
 
 **Category:** CI hardening / adversarial review follow-up
