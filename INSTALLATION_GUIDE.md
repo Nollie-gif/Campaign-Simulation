@@ -26,6 +26,16 @@ For the current Campaign-Simulation framework workflow, both Ubuntu and Windows 
 
 Branches and pull requests are safety mechanisms. They keep `main` usable while implementation and verification happen elsewhere.
 
+## Engineering Documentation Coverage
+
+Meaningful software changes must carry the relevant repository documentation in the same branch/PR. Read and follow `docs/ENGINEERING_DOCUMENTATION_POLICY.md` before changing runtime behavior, architecture, persistence, schemas, lifecycle rules, validation, compatibility, CI, or developer workflow.
+
+The Documentation Coverage Gate is part of the merge workflow. An implementation-sensitive PR must either update the relevant repository documentation or explicitly justify a behavior-neutral `Documentation impact: none` exemption in the PR body.
+
+Detailed live mechanics belong in the repository. External Workflow Decision Records preserve rationale, boundaries, status, and verification evidence and must be written only after a duplication audit against the live branch.
+
+The agent/developer owns this documentation discipline. The user is not expected to remember or request documentation updates manually.
+
 ## Review-Only Requests
 
 If the user explicitly asks for review-only work, proposed diffs only, or no repository mutation, do not create, update, commit, push, or merge repository changes until the user later authorizes implementation.
