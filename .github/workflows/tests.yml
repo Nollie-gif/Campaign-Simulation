@@ -25,3 +25,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate blank templates
         run: python tools/validate_blank_templates.py
+      - name: Validate artifact manifest completeness
+        run: python tools/validate_artifact_manifest.py
