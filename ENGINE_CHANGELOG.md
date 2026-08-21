@@ -12,6 +12,105 @@ anything before that date.
 
 ---
 
+## 2026-08-21 — Flight Control Extraction
+
+**Category:** Repository continuity / local engineering guardrail
+**Compatibility:** Additive only; no runtime/API behavior changed.
+
+### Why
+
+The Protected Main Rule (`INSTALLATION_GUIDE.md`) and the branch ruleset
+enforce the *server-side* half of the guarded engineering path (PR
+required, CI required, no bypass). Nothing enforced the *local* half — a
+fresh branch, exact staged scope, passing checks — before a commit was
+even made; that depended entirely on an agent remembering to do it, the
+same class of gap the change-ledger mechanism closed for durable records.
+Mission10-Simulation-Sequel and The-Test had already built, used in
+production, and adversarially hardened exactly this mechanism (Flight
+Control); porting it here closes the same gap without re-inventing it.
+
+### Change
+
+- Added `scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`,
+  `.githooks/pre-commit` (content-pinned via SHA-256, LF-pinned via
+  `.gitattributes`), and the full adversarial test suite
+  (`tests/test_preflight_commit.py`, `tests/test_install_preflight_hook.py`
+  — 74 tests total, all passing on this platform).
+- **Not a blind copy** — three deliberate adaptations, not cosmetic
+  renames:
+  - `ALLOWED_BRANCH_PREFIX` ("agent/" only) generalized to
+    `ALLOWED_BRANCH_PREFIXES`, matching this repository's own
+    already-documented `INSTALLATION_GUIDE.md` convention
+    (`feature/`, `fix/`, `hardening/`, `test/`, `docs/`, `agent/`) instead
+    of forcing every future branch onto a foreign single-prefix rule.
+  - `PROTECTED_BRANCHES` narrowed to `{main, master}` — no
+    `runtime-published`/`runtime-save-staging`-style branches exist here.
+  - `run_required_checks()` restructured: the three pure-file-content
+    checks (unit tests, blank-template validation, artifact-manifest
+    validation) run inside the isolated, `.git`-less materialized
+    snapshot exactly as Mission10's version does; `tools/validate_change_ledger.py`
+    runs separately against the real repository root, because it
+    inherently needs live Git history (`merge-base`/`diff`/`log` against
+    `origin/main`) that a git-less snapshot cannot provide — a
+    distinction Mission10's single-validator design never had to make.
+- **A real bug found only by actually running the ported checks against
+  real content, not by inspection:** the materialized snapshot had no
+  `PYTHONPATH`, so a child process's own subprocess (e.g.
+  `test_concurrent_identifiers_integration.py`, which shells out to a
+  fresh `python -c "from campaign_simulation..."`) resolved
+  `campaign_simulation` via whatever editable install happened to exist
+  in the outer environment instead of the snapshot's own materialized
+  `src/` — silently validating the live working tree rather than the
+  actually-staged content, which defeats the entire point of
+  materializing a snapshot. Fixed by prepending `{snapshot}/src` to the
+  child environment's `PYTHONPATH`. Mission10 has no equivalent
+  subprocess-spawning test, so this gap did not exist to find there.
+- Forbidden-token self-purity test
+  (`test_guardrail_has_no_product_mutation_commands`) adapted to this
+  repository's actual mutation surface (`commit_checkpoint(`,
+  `commit_manifest(`, `validate_gated_checkpoint(`) instead of Mission10's
+  Supabase/WDR-specific function names, which do not exist here.
+- Extended `tools/validate_change_ledger.py`'s domains: `scripts/*` added
+  to the `CHANGELOG.md`/`ENGINE_CHANGELOG.md` sensitive-path set (this
+  repository's first real use of a `scripts/` directory), and
+  `scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`,
+  `.githooks/*` added to the `AGENT_HANDOFF.md` domain — matching the
+  narrower, more precise pattern already used for The-Test and Mission10
+  after the Council review.
+- Resolved the classification ambiguity between Flight Control (this
+  repository's own engineering) and the pre-existing Experiment Safety
+  installation (`docs/safety-installation/`, which protects a *DM's own,
+  separate* campaign runtime): added an explicit "which repository does
+  this change target" cross-reference to `AGENT_HANDOFF.md`,
+  `docs/safety-installation/README.md`, and `LOTS_SAFE_BUILD_PROMPT.md`,
+  without weakening either system or merging their scopes.
+
+### Compatibility / recovery
+
+- No existing test, template, schema, or public API changed.
+- Flight Control is local-only and additive: a clone without the hook
+  installed still works exactly as before (CI remains the independent
+  backstop regardless of local guardrail state).
+
+### Verification
+
+- All 74 ported tests pass on this platform (Windows).
+- Live, non-mocked adversarial tests in an isolated worktree: a
+  branch-name outside `ALLOWED_BRANCH_PREFIXES` is rejected
+  (`NON-FEATURE-BRANCH`); staged content tampered with after a successful
+  `COMMIT-READY` is rejected at the real `git commit` boundary
+  (`PREFLIGHT-MARKER-MISMATCH`) by the actually-installed hook, not a
+  mock. Direct-commit-on-`main` and stale-branch rejection are covered by
+  the ported unit/integration suite (`test_protected_branch_is_rejected`,
+  `test_stale_branch_fails_closed`,
+  `test_git_replace_ref_does_not_fake_freshness_against_origin_main` — the
+  last against a real, disposable Git repository, not a mock) rather than
+  re-proven live here, since `main` does not carry Flight Control until
+  this change merges into it; full live re-verification against the
+  merged, real `main` is planned as part of fresh-clone verification.
+
+---
+
 ## 2026-08-21 — Change-ledger self-defense hardening
 
 **Category:** CI hardening / adversarial review follow-up

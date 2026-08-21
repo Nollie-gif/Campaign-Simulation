@@ -26,6 +26,12 @@ For the current Campaign-Simulation framework workflow, both Ubuntu and Windows 
 
 Branches and pull requests are safety mechanisms. They keep `main` usable while implementation and verification happen elsewhere.
 
+Steps 2–4 are mechanically enforced locally by Flight Control
+(`scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`) — see
+`AGENT_HANDOFF.md` for the full guardrail. It does not replace this
+process; it makes the parts of it that were previously "the agent should
+remember to do this" into a deterministic local gate.
+
 ## Review-Only Requests
 
 If the user explicitly asks for review-only work, proposed diffs only, or no repository mutation, do not create, update, commit, push, or merge repository changes until the user later authorizes implementation.

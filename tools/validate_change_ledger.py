@@ -63,6 +63,7 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
             "schemas/*",
             ".github/workflows/*",
             "tools/*",
+            "scripts/*",
         ],
     ),
     (
@@ -72,6 +73,7 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
             "schemas/*",
             ".github/workflows/*",
             "tools/*",
+            "scripts/*",
         ],
     ),
     (
@@ -79,6 +81,9 @@ LEDGER_DOMAINS: list[tuple[str, list[str]]] = [
         [
             ".github/copilot-instructions.md",
             "INSTALLATION_GUIDE.md",
+            "scripts/preflight_commit.py",
+            "scripts/install_preflight_hook.py",
+            ".githooks/*",
         ],
     ),
 ]
@@ -106,8 +111,15 @@ def changed_paths() -> set[str]:
     if base.returncode != 0:
         return set()
     merge_base = base.stdout.strip()
-    output = _git("diff", "--name-only", f"{merge_base}..HEAD")
-    return {line for line in output.splitlines() if line}
+    committed = _git("diff", "--name-only", f"{merge_base}..HEAD")
+    # Also include the currently staged (but not yet committed) diff. Local
+    # Flight Control preflight runs this before the commit that would
+    # satisfy the requirement actually exists, so committed-only history
+    # can never see it - a ledger update staged right now must count
+    # immediately, not only after landing. In CI there is never anything
+    # staged beyond what HEAD already has, so this is a no-op there.
+    staged = _git("diff", "--cached", "--name-only")
+    return {line for line in (committed + staged).splitlines() if line}
 
 
 def exempted_ledgers() -> set[str]:

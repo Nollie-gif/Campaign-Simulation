@@ -29,3 +29,11 @@ CHANGELOG."
   CI to commit SHAs instead of mutable version tags.
 - Removed a real personal email address that had been present throughout
   the public Git history since the repository's early commits.
+- **(engineering)** Added Flight Control, a local commit guardrail
+  (`scripts/preflight_commit.py`, `scripts/install_preflight_hook.py`,
+  `.githooks/pre-commit`), extracted and adapted from the mechanism proven
+  in Mission10-Simulation-Sequel and The-Test. Run
+  `python scripts/install_preflight_hook.py` once per clone, then
+  `python scripts/preflight_commit.py` before each commit — see
+  `AGENT_HANDOFF.md` for the full guardrail and how it relates to the
+  separate, DM-facing Experiment Safety installation.
