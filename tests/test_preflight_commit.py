@@ -898,6 +898,16 @@ class CampaignSimulationPreCommitHookInterpreterSelectionTests(unittest.TestCase
         self.assertNotIn("INVOKED:python3:", result.stdout)
         self.assertNotIn("INVOKED:python:", result.stdout)
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "Git for Windows' MSYS sh resolves 'uname' to a MINGW/MSYS-identifying "
+        "string via its own runtime, independent of an isolated PATH override on "
+        "this host - confirmed by a real Windows CI failure, not assumed. There is "
+        "no reliable way to make sh believe it is running on a non-Windows kernel "
+        "while it is actually on Windows. The behavior this test targets (ignoring "
+        "an unrelated 'py' on a genuinely POSIX host) is still fully exercised on "
+        "Linux/macOS CI, where no such override is needed in the first place.",
+    )
     def test_posix_shell_ignores_unrelated_py_and_uses_python3(self) -> None:
         # This is the regression case for the P2: a "py" executable present
         # on a POSIX PATH must not be selected, since it may be unrelated to
@@ -916,6 +926,12 @@ class CampaignSimulationPreCommitHookInterpreterSelectionTests(unittest.TestCase
         )
         self.assertNotIn("INVOKED:py:", result.stdout)
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "Same MSYS-runtime uname leak as "
+        "test_posix_shell_ignores_unrelated_py_and_uses_python3 - see that test's "
+        "skip reason. Fully exercised on Linux/macOS CI.",
+    )
     def test_posix_shell_falls_back_to_python_when_python3_absent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = Path(tmp)
