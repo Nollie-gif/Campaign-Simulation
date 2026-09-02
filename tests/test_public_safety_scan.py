@@ -21,6 +21,22 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 SCAN_PATH = ROOT / "tools" / "public_safety_scan.py"
 
+# Every secret- and address-shaped fixture is assembled at runtime, so this
+# file contains no contiguous match for the scanner's own patterns and can
+# therefore be scanned in full by the tool it tests. A blanket
+# path exemption was the earlier approach and was strictly worse: it would
+# have skipped a real credential accidentally committed here.
+_AWS_KEY = "AKIA" + "ABCDEFGHIJKLMNOP"
+_GH_PAT = "github_pat_" + "1234567890ABCDEFGHIJ"
+_OPENAI_KEY = "sk-proj-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+_GENERIC_VALUE = "abcdefghijklmnopqrstuvwxyz" + "123456"
+_COMPANY = "real-" + "company.com"
+_NON_NOREPLY = "real.human" + "@" + "example-not-noreply.com"
+
+
+def _addr(user: str) -> str:
+    return user + "@" + _COMPANY
+
 
 def _load_scan_module():
     spec = importlib.util.spec_from_file_location("public_safety_scan_under_test", SCAN_PATH)
@@ -36,9 +52,6 @@ def _run_scan(repo_root: Path, module) -> list[str]:
     failures: list[str] = []
     for path in module.tracked_files():
         if not path.is_file():
-            continue
-        relative = path.relative_to(repo_root).as_posix()
-        if relative == module.SELF_TEST_FIXTURE_PATH:
             continue
         is_artifact = module.ARTIFACT_DIRECTORY in path.parents
         suffix = path.suffix.lower()
@@ -97,9 +110,9 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         self.assertEqual(_run_scan(self.repo_root, self.module), [])
 
     def test_finding1_scans_files_outside_old_suffix_allowlist(self) -> None:
-        (self.repo_root / "secrets.env").write_text("AWS_KEY=AKIAABCDEFGHIJKLMNOP\n")
-        (self.repo_root / "run.sh").write_text("token=github_pat_1234567890ABCDEFGHIJ\n")
-        (self.repo_root / "noext").write_text("contact bob@real-company.com\n")
+        (self.repo_root / "secrets.env").write_text(f"AWS_KEY={_AWS_KEY}\n")
+        (self.repo_root / "run.sh").write_text(f"token={_GH_PAT}\n")
+        (self.repo_root / "noext").write_text(f"contact {_addr('bob')}\n")
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
         joined = "\n".join(failures)
@@ -110,28 +123,28 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
     def test_finding2_pdf_author_and_email_are_caught(self) -> None:
         pdf_bytes = (
             b"%PDF-1.4\n1 0 obj\n<< /Author (Alice Person) /Title (Doc) >>\nendobj\n"
-            b"trailer\n<< /Info 1 0 R >>\ncarol@real-company.com\n%%EOF"
+            b"trailer\n<< /Info 1 0 R >>\n" + _addr("carol").encode() + b"\n%%EOF"
         )
         (self.repo_root / "artifacts" / "doc.pdf").write_bytes(pdf_bytes)
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
         joined = "\n".join(failures)
         self.assertIn("Alice Person", joined)
-        self.assertIn("carol@real-company.com", joined)
+        self.assertIn(_addr("carol"), joined)
 
     def test_finding4_docx_body_secret_and_email_are_caught(self) -> None:
         _make_docx(
             self.repo_root / "artifacts" / "body_secret.docx",
             document_xml=(
                 '<?xml version="1.0"?><w:document xmlns:w="ns"><w:body>'
-                "<w:p><w:r><w:t>contact dave@real-company.com or "
-                "AKIAABCDEFGHIJKLMNOP</w:t></w:r></w:p></w:body></w:document>"
+                f"<w:p><w:r><w:t>contact {_addr('dave')} or "
+                f"{_AWS_KEY}</w:t></w:r></w:p></w:body></w:document>"
             ),
         )
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
         joined = "\n".join(failures)
-        self.assertIn("dave@real-company.com", joined)
+        self.assertIn(_addr("dave"), joined)
         self.assertIn("AWS access key", joined)
 
     def test_finding5_attributed_core_property_elements_are_caught(self) -> None:
@@ -179,13 +192,13 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
             self.repo_root / "artifacts" / "split_run.docx",
             document_xml=(
                 '<?xml version="1.0"?><w:document xmlns:w="ns"><w:body><w:p>'
-                "<w:r><w:t>alice@real-</w:t></w:r><w:r><w:t>company.com</w:t></w:r>"
+                f"<w:r><w:t>alice@{_COMPANY[:5]}</w:t></w:r><w:r><w:t>{_COMPANY[5:]}</w:t></w:r>"
                 "</w:p></w:body></w:document>"
             ),
         )
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
-        self.assertTrue(any("alice@real-company.com" in f for f in failures), failures)
+        self.assertTrue(any(_addr("alice") in f for f in failures), failures)
 
     def test_finding9_pdf_hex_encoded_author_is_caught(self) -> None:
         name = "Alice Person"
@@ -216,7 +229,7 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
         subprocess.run(
             [
-                "git", "-c", "user.email=real.human@example-not-noreply.com", "-c", "user.name=Real Human",
+                "git", "-c", f"user.email={_NON_NOREPLY}", "-c", "user.name=Real Human",
                 "commit", "-q", "-m", "direct push to main",
             ],
             cwd=self.repo_root, check=True,
@@ -243,13 +256,13 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {"PUBLIC_SAFETY_COMMIT_RANGE_BASE": before_sha}):
             self.module.check_commit_identities(with_override)
         self.assertTrue(
-            any("real.human@example-not-noreply.com" in f for f in with_override), with_override
+            any(_NON_NOREPLY in f for f in with_override), with_override
         )
 
     def test_finding11_unquoted_env_secret_is_caught(self) -> None:
         (self.repo_root / "unquoted.env").write_text(
-            "OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n"
-            "secret=abcdefghijklmnopqrstuvwxyz123456\n"
+            f"OPENAI_API_KEY={_OPENAI_KEY}\n"
+            f"secret={_GENERIC_VALUE}\n"
         )
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
@@ -264,14 +277,14 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
                     'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/'
                     'officeDocument/2006/relationships/hyperlink" '
-                    'Target="mailto:alice@real-company.com" TargetMode="External"/>'
+                    f'Target="mailto:{_addr("alice")}" TargetMode="External"/>'
                     "</Relationships>"
                 ),
             },
         )
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
-        self.assertTrue(any("alice@real-company.com" in f for f in failures), failures)
+        self.assertTrue(any(_addr("alice") in f for f in failures), failures)
 
     def test_finding13_pdf_xmp_creator_is_caught(self) -> None:
         pdf_bytes = (
@@ -291,7 +304,7 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         # Plain `git ls-files` C-escapes this name under core.quotePath, which
         # would build a nonexistent Path and silently skip the file entirely.
         (self.repo_root / "résumé.env").write_text(
-            "AWS_KEY=AKIAABCDEFGHIJKLMNOP\n", encoding="utf-8"
+            f"AWS_KEY={_AWS_KEY}\n", encoding="utf-8"
         )
         self._commit()
         self.module.ROOT = self.repo_root
@@ -305,7 +318,41 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         self.assertTrue(pattern.match("username@users.noreply.github.com"))
         self.assertTrue(pattern.match("12345+username@users.noreply.github.com"))
         self.assertTrue(pattern.match("noreply@github.com"))
-        self.assertFalse(pattern.match("real.human@example-not-noreply.com"))
+        self.assertFalse(pattern.match(_NON_NOREPLY))
+
+    def test_finding16_bot_noreply_identity_is_accepted(self) -> None:
+        pattern = self.module.ALLOWED_EMAIL_PATTERN
+        self.assertTrue(pattern.match("49699333+dependabot[bot]@users.noreply.github.com"))
+        self.assertTrue(pattern.match("41898282+github-actions[bot]@users.noreply.github.com"))
+
+    def test_finding17_text_is_not_joined_across_structural_boundaries(self) -> None:
+        # Two separate paragraphs are not displayed as one continuous string,
+        # so joining them would invent an address the document never shows.
+        _make_docx(
+            self.repo_root / "artifacts" / "two_paragraphs.docx",
+            document_xml=(
+                '<?xml version="1.0"?><w:document xmlns:w="ns"><w:body>'
+                f"<w:p><w:r><w:t>alice@{_COMPANY[:5]}</w:t></w:r></w:p>"
+                f"<w:p><w:r><w:t>{_COMPANY[5:]}</w:t></w:r></w:p>"
+                "</w:body></w:document>"
+            ),
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertEqual(failures, [], "must not join text across paragraph boundaries")
+
+    def test_finding18_scanner_own_test_file_is_not_exempt(self) -> None:
+        # The scanner must not categorically skip any path: a real credential
+        # committed into its own test file has to be caught like anywhere else.
+        self.assertFalse(hasattr(self.module, "SELF_TEST_FIXTURE_PATH"))
+        tests_dir = self.repo_root / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_public_safety_scan.py").write_text(
+            f"leaked = '{_AWS_KEY}'\n"
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("AWS access key" in f for f in failures), failures)
 
     def test_commit_identities_accept_github_noreply_committer(self) -> None:
         # Empirically confirmed against PR #17's real refs/pull/17/merge:
@@ -342,7 +389,7 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
         subprocess.run(
             [
-                "git", "-c", "user.email=real.human@example-not-noreply.com", "-c", "user.name=Real Human",
+                "git", "-c", f"user.email={_NON_NOREPLY}", "-c", "user.name=Real Human",
                 "commit", "-q", "-m", "feature commit",
             ],
             cwd=self.repo_root, check=True,
@@ -354,7 +401,7 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         self.module.ROOT = self.repo_root
         failures: list[str] = []
         self.module.check_commit_identities(failures)
-        self.assertTrue(any("real.human@example-not-noreply.com" in f for f in failures))
+        self.assertTrue(any(_NON_NOREPLY in f for f in failures))
 
 
 if __name__ == "__main__":

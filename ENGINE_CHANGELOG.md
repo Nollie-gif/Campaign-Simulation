@@ -259,6 +259,73 @@ the scanner on the real tree before commit and fixed by rewording.
 `python -m unittest discover -s tests` — 156 tests, `OK (skipped=4)`.
 `tools/public_safety_scan.py` passes clean against the real tree.
 
+## 2026-09-02 — public-safety hardening round 4 (third exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+A third independent Codex review against exact head `b9c77b3` returned 4
+findings, two of which were criticisms of fixes made in earlier rounds of
+this same recovery — the blanket test-file exemption, and a false positive
+introduced by the run-joining fix. All 4 were reproduced before action.
+
+### Change
+
+- **Removed the blanket self-exemption entirely.** Round 1 skipped
+  `tests/test_public_safety_scan.py` wholesale so its deliberate
+  secret-shaped fixtures would not self-trip the scanner. That was
+  strictly worse than it looked: a *real* credential committed to that
+  path would also have been skipped, including when the trusted copy from
+  `main` grades a PR. `SELF_TEST_FIXTURE_PATH` and both skip sites are
+  gone; instead every fixture is assembled at runtime from fragments
+  (`"AKIA" + "ABCDEFGHIJKLMNOP"`), so the file contains no contiguous
+  match and is now scanned in full by the tool it tests. A regression test
+  asserts the constant no longer exists and that a credential in that path
+  is caught.
+- **Run-joining no longer crosses structural boundaries.** Round 2 joined
+  every `<w:t>` in a story part with no separator to catch text split
+  across runs; that also joined text across paragraph, table row/cell,
+  tab, and line-break boundaries, which Word does not display as
+  continuous — inventing addresses the document never shows and blocking
+  safe artifact updates. Those elements now emit a separator. Verified
+  both directions: adjacent runs inside one paragraph are still caught,
+  and paragraph/tab boundaries no longer produce a match.
+- **Bot noreply identities accepted**: the username component rejected
+  bracketed bot addresses (dependabot, github-actions), which would have
+  failed the mandatory job for every automated commit.
+
+### Deferred, with reason: incoming-range history scanning
+
+The fourth finding is real and reproduced: the scan inspects only the
+checked-out tip tree, so a secret added in one commit and deleted by the
+tip passes both jobs while remaining reachable in history after a merge
+that preserves commits. It is **not fixed here**, because implementing it
+would immediately fail this PR against its own history: 4 earlier blobs of
+`tests/test_public_safety_scan.py` in this branch's range still contain
+the pre-fix contiguous fixture literals (verified by walking
+`merge-base..HEAD`). Passing would require rewriting PR #17's history,
+which the governing instruction for this recovery explicitly forbids.
+Deferring is clean rather than merely convenient: once this PR merges,
+those blobs are ancestors of `main`, so a later PR adding range scanning
+starts from a base that already contains them and never re-scans them.
+The compensating control already shipped in this same PR — the weekly
+full-history gitleaks scan in `secret-scan.yml` — covers reachable
+history, and the blobs in question hold synthetic test constants, not
+real credentials.
+
+### Verification
+
+All 4 findings reproduced before action; the 3 fixed ones confirmed fixed,
+including two explicit no-regression checks on the run-joining change.
+Removing the exemption immediately surfaced a real self-scan hit (the
+constant name `_GENERIC_SECRET` plus its assignment matched the generic
+pattern), which was fixed by renaming rather than by re-adding any
+exemption. `python -m unittest discover -s tests` — 159 tests,
+`OK (skipped=4)`. `tools/public_safety_scan.py` passes clean against the
+real tree with no path exempted.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but

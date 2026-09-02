@@ -13,6 +13,14 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** A third exact-head-bound review found 4 more issues,
+  two of them criticisms of earlier fixes in this same effort: the
+  scanner's blanket exemption for its own test file (removed entirely —
+  fixtures are now assembled at runtime so nothing is exempt), and text
+  being joined across paragraph and tab boundaries, inventing addresses
+  the document never displays. GitHub bot no-reply addresses are now
+  accepted too. One further finding — history-range scanning — is
+  deliberately deferred with reasoning recorded in `ENGINE_CHANGELOG.md`.
 - **(engineering)** A second exact-head-bound review found 6 more gaps,
   each reproduced before fixing — most materially, a tracked file whose
   name contains non-ASCII characters was silently never scanned at all

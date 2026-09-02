@@ -24,8 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # valid: the modern one prefixed with a numeric account id and a "+", and
 # the bare-username form issued to older accounts. GitHub's own synthetic
 # committer address on the plain github.com domain is accepted too.
+# Bot accounts carry a bracketed suffix in the username component
+# (e.g. dependabot and github-actions), which is still a valid noreply
+# address and must not fail the identity gate.
 ALLOWED_EMAIL_PATTERN = re.compile(
-    r"^(([0-9]+\+)?[\w-]+@users\.noreply\.github\.com|noreply@github\.com)$"
+    r"^(([0-9]+\+)?[\w.\[\]-]+@users\.noreply\.github\.com|noreply@github\.com)$"
 )
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
 
@@ -75,11 +78,6 @@ PDF_METADATA_HEX_PATTERN = re.compile(rb"/Author\s*<([0-9A-Fa-f\s]*)>")
 # with no Info-dictionary /Author entry at all.
 PDF_XMP_CREATOR_PATTERN = re.compile(rb"<dc:creator>(.*?)</dc:creator>", re.DOTALL)
 XMP_RDF_LI_PATTERN = re.compile(rb"<rdf:li[^>]*>(.*?)</rdf:li>", re.DOTALL)
-
-# This scanner's own regression suite deliberately embeds secret-shaped
-# strings and non-noreply sample emails as fixtures to prove detection
-# works; it is not leaked material and must not be flagged.
-SELF_TEST_FIXTURE_PATH = "tests/test_public_safety_scan.py"
 
 
 def tracked_files() -> list[Path]:
@@ -166,11 +164,19 @@ def scan_docx_metadata(path: Path, failures: list[str]) -> None:
                     # string with no separator, so a secret/email split
                     # across runs by formatting is joined the same way
                     # before scanning — the raw-XML scan below would miss it.
-                    joined_text = "".join(
-                        el.text for el in story_root.iter()
-                        if el.tag.rpartition("}")[2] == "t" and el.text
-                    )
-                    if joined_text:
+                    # Structural boundaries (paragraph, table row/cell, tab,
+                    # line break) are NOT displayed as continuous text, so
+                    # they emit a separator: joining across them would
+                    # invent addresses that the document never shows.
+                    pieces: list[str] = []
+                    for el in story_root.iter():
+                        tag = el.tag.rpartition("}")[2]
+                        if tag in ("p", "tr", "tc", "tab", "br", "cr"):
+                            pieces.append("\n")
+                        elif tag == "t" and el.text:
+                            pieces.append(el.text)
+                    joined_text = "".join(pieces)
+                    if joined_text.strip():
                         _scan_text(relative, joined_text, failures, where=f"{name} (joined text):")
                 elif "w:ins" in content or "w:del" in content:
                     failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
@@ -289,9 +295,6 @@ def main() -> int:
 
     for path in tracked_files():
         if not path.is_file():
-            continue
-        relative = path.relative_to(ROOT).as_posix()
-        if relative == SELF_TEST_FIXTURE_PATH:
             continue
         is_artifact = ARTIFACT_DIRECTORY in path.parents
         suffix = path.suffix.lower()
