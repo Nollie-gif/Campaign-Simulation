@@ -13,6 +13,14 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** A second exact-head-bound review found 6 more gaps,
+  each reproduced before fixing — most materially, a tracked file whose
+  name contains non-ASCII characters was silently never scanned at all
+  (Git quotes such names, and the resulting path didn't resolve). Also:
+  the scan job could be weakened by the very PR it was grading; unquoted
+  `KEY=value` secrets were missed; DOCX hyperlink targets and PDF XMP
+  author metadata were never inspected; and GitHub's legacy no-reply
+  address format was wrongly rejected. See `ENGINE_CHANGELOG.md`.
 - **(engineering)** A fresh, exact-head-bound independent review of PR #17
   found 5 more real gaps, each reproduced before fixing: unpinned actions
   in the scheduled secret-scan workflow; a direct push to `main` could

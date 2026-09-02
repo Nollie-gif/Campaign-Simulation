@@ -196,6 +196,69 @@ verified by direct inspection, no repro needed. `python -m unittest
 discover -s tests` — 151 tests, `OK (skipped=4)` (147 prior + 4 new).
 `tools/public_safety_scan.py` passes clean against the real tree.
 
+## 2026-09-02 — public-safety hardening round 3 (second exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+A second independent Codex review, requested against exact head `1e18711`
+after round 2's fixes went green in CI, returned 6 further findings (all
+`original_commit_id == 1e18711`). Each was reproduced before being fixed.
+
+### Change
+
+- **Self-grading gate** (`.github/workflows/tests.yml`): the
+  `public-safety` job ran the scanner *from the PR's own merge tree*, so a
+  PR could weaken the scanner in the same commit that adds the material
+  the gate exists to reject. Adopted the identical trusted-base idiom the
+  `change-ledger` job already uses — restore `tools/public_safety_scan.py`
+  from `origin/main` when it exists there. This is inert on this PR (the
+  scanner is not on `main` yet) and becomes self-protecting the moment
+  this PR merges.
+- **Unquoted secret assignments**: the generic API-key pattern required
+  quotes around the value, so the ordinary dotenv/shell form
+  (`OPENAI_API_KEY=sk-proj-…`, `secret=…`) never matched. Quotes are now
+  optional. Keyword list deliberately unchanged, to avoid widening
+  false-positive surface beyond the confirmed finding.
+- **DOCX relationship targets**: hyperlink targets live in relationship
+  parts (`word/_rels/document.xml.rels`), which the story-part loop never
+  read — a `mailto:` personal address or credential-bearing URL passed
+  untouched. All `.rels` parts are now scanned.
+- **PDF XMP authorship**: a PDF can record its author only in an XMP
+  packet (`dc:creator`) with no Info-dictionary `/Author` at all; both
+  existing patterns missed it and a personal name is not secret-shaped, so
+  the file passed clean. Added XMP `dc:creator`/`rdf:li` extraction.
+  Compressed XMP packets remain the same documented gap as compressed
+  content streams.
+- **Non-ASCII tracked filenames**: with Git's default `core.quotePath`,
+  `git ls-files` renders such a name C-escaped and quoted
+  (`"r\303\251sum\303\251.env"`); the resulting `Path` does not exist, so
+  `main()` silently skipped the file and never scanned its contents.
+  Reproduced with a real AWS-key-bearing file that scanned clean. Switched
+  to `git ls-files -z` with NUL-delimited decoding. This is the most
+  material of the six: it silently disabled scanning per-file, and this
+  repository's artifact library does carry non-ASCII names.
+- **Legacy GitHub noreply identities**: `ALLOWED_EMAIL_PATTERN` accepted
+  only the modern numeric-id noreply form, so a contributor using the
+  legitimate legacy bare-username noreply address would have every commit
+  rejected. Both forms are now accepted.
+- Added 5 new regression tests (findings 11–15) to
+  `tests/test_public_safety_scan.py`.
+
+### Verification
+
+All 6 findings reproduced against throwaway fixtures before fixing and
+confirmed fixed after (the filename finding visibly: the constructed path
+went from nonexistent to resolving, and its AWS key from unscanned to
+flagged). Fixing the noreply pattern initially introduced a self-scan
+false positive — the explanatory comment contained a literal
+address-shaped example the scanner correctly rejected — caught by running
+the scanner on the real tree before commit and fixed by rewording.
+`python -m unittest discover -s tests` — 156 tests, `OK (skipped=4)`.
+`tools/public_safety_scan.py` passes clean against the real tree.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but

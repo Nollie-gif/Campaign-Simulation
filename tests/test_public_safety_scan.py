@@ -246,6 +246,67 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
             any("real.human@example-not-noreply.com" in f for f in with_override), with_override
         )
 
+    def test_finding11_unquoted_env_secret_is_caught(self) -> None:
+        (self.repo_root / "unquoted.env").write_text(
+            "OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n"
+            "secret=abcdefghijklmnopqrstuvwxyz123456\n"
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("Generic API key assignment" in f for f in failures), failures)
+
+    def test_finding12_docx_relationship_target_is_scanned(self) -> None:
+        _make_docx(
+            self.repo_root / "artifacts" / "hyperlink.docx",
+            extra_parts={
+                "word/_rels/document.xml.rels": (
+                    '<?xml version="1.0"?><Relationships '
+                    'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/'
+                    'officeDocument/2006/relationships/hyperlink" '
+                    'Target="mailto:alice@real-company.com" TargetMode="External"/>'
+                    "</Relationships>"
+                ),
+            },
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("alice@real-company.com" in f for f in failures), failures)
+
+    def test_finding13_pdf_xmp_creator_is_caught(self) -> None:
+        pdf_bytes = (
+            b"%PDF-1.4\n1 0 obj\n<< /Type /Metadata /Subtype /XML >>\nstream\n"
+            b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+            b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            b'<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">'
+            b"<dc:creator><rdf:Seq><rdf:li>Alice Person</rdf:li></rdf:Seq></dc:creator>"
+            b"</rdf:Description></rdf:RDF></x:xmpmeta>\nendstream\nendobj\n%%EOF"
+        )
+        (self.repo_root / "artifacts" / "xmp_author.pdf").write_bytes(pdf_bytes)
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("Alice Person" in f for f in failures), failures)
+
+    def test_finding14_non_ascii_tracked_filename_is_scanned(self) -> None:
+        # Plain `git ls-files` C-escapes this name under core.quotePath, which
+        # would build a nonexistent Path and silently skip the file entirely.
+        (self.repo_root / "résumé.env").write_text(
+            "AWS_KEY=AKIAABCDEFGHIJKLMNOP\n", encoding="utf-8"
+        )
+        self._commit()
+        self.module.ROOT = self.repo_root
+        tracked = [p.name for p in self.module.tracked_files()]
+        self.assertIn("résumé.env", tracked)
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("AWS access key" in f for f in failures), failures)
+
+    def test_finding15_legacy_github_noreply_identity_is_accepted(self) -> None:
+        pattern = self.module.ALLOWED_EMAIL_PATTERN
+        self.assertTrue(pattern.match("username@users.noreply.github.com"))
+        self.assertTrue(pattern.match("12345+username@users.noreply.github.com"))
+        self.assertTrue(pattern.match("noreply@github.com"))
+        self.assertFalse(pattern.match("real.human@example-not-noreply.com"))
+
     def test_commit_identities_accept_github_noreply_committer(self) -> None:
         # Empirically confirmed against PR #17's real refs/pull/17/merge:
         # GitHub's synthetic merge commit uses committer "GitHub

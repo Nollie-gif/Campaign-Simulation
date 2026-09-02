@@ -20,7 +20,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_EMAIL_PATTERN = re.compile(r"^([0-9]+\+[\w-]+@users\.noreply\.github\.com|noreply@github\.com)$")
+# Both GitHub noreply forms on the users.noreply.github.com domain are
+# valid: the modern one prefixed with a numeric account id and a "+", and
+# the bare-username form issued to older accounts. GitHub's own synthetic
+# committer address on the plain github.com domain is accepted too.
+ALLOWED_EMAIL_PATTERN = re.compile(
+    r"^(([0-9]+\+)?[\w-]+@users\.noreply\.github\.com|noreply@github\.com)$"
+)
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
 
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -31,7 +37,10 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Postgres/Supabase connection string with credentials",
      re.compile(r"postgres(?:ql)?://[^\s'\"]+:[^\s'\"]+@")),
     ("Slack token", re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}")),
-    ("Generic API key assignment", re.compile(r"(?i)(api[_-]?key|secret|service_role)\s*[:=]\s*['\"][A-Za-z0-9_\-]{20,}['\"]")),
+    # Quotes are optional: the common dotenv/shell form is unquoted
+    # (OPENAI_API_KEY=sk-proj-..., secret=...), which a quoted-only
+    # pattern silently misses.
+    ("Generic API key assignment", re.compile(r"(?i)(api[_-]?key|secret|service_role)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}['\"]?")),
 ]
 
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -62,6 +71,11 @@ WORD_STORY_PART_PATTERN = re.compile(r"^word/(document|header\d*|footer\d*|footn
 PDF_METADATA_LITERAL_PATTERN = re.compile(rb"/Author\s*\((.*?)(?<!\\)\)", re.DOTALL)
 PDF_METADATA_HEX_PATTERN = re.compile(rb"/Author\s*<([0-9A-Fa-f\s]*)>")
 
+# A PDF may carry authorship only in an XMP metadata packet (dc:creator),
+# with no Info-dictionary /Author entry at all.
+PDF_XMP_CREATOR_PATTERN = re.compile(rb"<dc:creator>(.*?)</dc:creator>", re.DOTALL)
+XMP_RDF_LI_PATTERN = re.compile(rb"<rdf:li[^>]*>(.*?)</rdf:li>", re.DOTALL)
+
 # This scanner's own regression suite deliberately embeds secret-shaped
 # strings and non-noreply sample emails as fixtures to prove detection
 # works; it is not leaked material and must not be flagged.
@@ -69,10 +83,18 @@ SELF_TEST_FIXTURE_PATH = "tests/test_public_safety_scan.py"
 
 
 def tracked_files() -> list[Path]:
+    # -z: NUL-delimited and never quoted/C-escaped. Plain `git ls-files`
+    # renders a non-ASCII path as "r\303\251sum\303\251.env" under the
+    # default core.quotePath, which would build a Path that does not exist
+    # and be silently skipped — leaving that file unscanned.
     output = subprocess.run(
-        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True
     ).stdout
-    return [ROOT / line for line in output.splitlines() if line]
+    return [
+        ROOT / name.decode("utf-8", errors="surrogateescape")
+        for name in output.split(b"\x00")
+        if name
+    ]
 
 
 def _scan_text(relative: str, text: str, failures: list[str], *, where: str = "") -> None:
@@ -153,6 +175,14 @@ def scan_docx_metadata(path: Path, failures: list[str]) -> None:
                 elif "w:ins" in content or "w:del" in content:
                     failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
                 _scan_text(relative, content, failures, where=f"{name}:")
+            # Relationship parts hold hyperlink targets — a mailto: address,
+            # a credential-bearing URL, or a local path lives here, not in
+            # any story part.
+            for name in sorted(names):
+                if not name.endswith(".rels"):
+                    continue
+                rels = archive.read(name).decode("utf-8", errors="replace")
+                _scan_text(relative, rels, failures, where=f"{name}:")
     except zipfile.BadZipFile:
         failures.append(f"{relative}: not a valid zip/docx container")
 
@@ -193,6 +223,18 @@ def scan_pdf_metadata(path: Path, failures: list[str]) -> None:
                 f"({value!r}) — add it to ALLOWED_METADATA_VALUES only after "
                 "confirming it is not a personal name"
             )
+
+    for match in PDF_XMP_CREATOR_PATTERN.finditer(data):
+        block = match.group(1)
+        entries = [m.group(1) for m in XMP_RDF_LI_PATTERN.finditer(block)] or [block]
+        for entry in entries:
+            value = entry.decode("utf-8", errors="replace").strip()
+            if value and value not in ALLOWED_METADATA_VALUES:
+                failures.append(
+                    f"{relative}: PDF XMP dc:creator is set to an unreviewed value "
+                    f"({value!r}) — add it to ALLOWED_METADATA_VALUES only after "
+                    "confirming it is not a personal name"
+                )
 
     # Scan the raw (undecoded) bytes only: page-content streams are usually
     # FlateDecode-compressed drawing operators/font data, and decompressing
