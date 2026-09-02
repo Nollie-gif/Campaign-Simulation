@@ -12,6 +12,80 @@ anything before that date.
 
 ---
 
+## 2026-09-02 — PR #17 recovery: forward-port + confirmed-defect fixes (Gate 10)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+PR #17 (`tools/public_safety_scan.py` + `public-safety` CI job) had been
+open since 2026-08-21, unmergeable (`CONFLICTING` against current `main`,
+which had since gained SHA-pinned Actions and the change-ledger CI job),
+with 6 unresolved `chatgpt-codex-connector` review threads. Per live Asana
+Gate 10 (Campaign-Simulation — Control Room, GID 1217845405841717), the
+goal was to finish this PR without rewriting history or merging an
+incomplete security control, resolving findings as reproduced fact rather
+than by blind single-example patching.
+
+### Change
+
+- Merged current `main` (`890f298`) into
+  `hardening/public-safety-ci-gate` (merge commit, not rebase — preserves
+  the branch's original 3 commits and every review thread's anchor SHA).
+  The only real conflict was `.github/workflows/tests.yml`: resolved by
+  keeping both the `public-safety` job (this branch) and the
+  `change-ledger` job (`main`), and re-pinning `public-safety`'s
+  `actions/checkout`/`actions/setup-python` to the same commit SHAs `main`
+  already uses instead of the branch's original floating `@v4`/`@v5` tags.
+- Fixed 5 of 6 open review findings in `tools/public_safety_scan.py`,
+  each reproduced against a throwaway fixture repo before being treated
+  as confirmed, grouped as two coherent classes:
+  - **Coverage gaps** (findings: text-suffix allowlist skipped
+    `.env`/shell/extensionless files; PDF artifacts under `artifacts/`
+    were never opened; DOCX body text was sent only to the metadata
+    check, never to the secret/email scan). Fixed by dropping the
+    suffix allowlist (every non-artifact-binary tracked file now goes
+    through the same text scan; a file that fails UTF-8 decoding is
+    silently skipped, same as before) and adding `scan_pdf_metadata()`
+    (checks `/Author` — the PDF spec's personal-identity field, unlike
+    `/Creator`/`/Producer` which name the authoring *application* — plus
+    the same secret/email scan against the PDF's raw bytes).
+  - **DOCX parsing fidelity** (findings: `dc:creator`/`cp:lastModifiedBy`
+    regexes used exact open/close tags and missed a valid attributed form
+    like `<dc:creator xml:space="preserve">…`; tracked-changes detection
+    only inspected `word/document.xml`, missing headers/footers/
+    footnotes/endnotes). Fixed by parsing `docProps/core.xml` with
+    `xml.etree.ElementTree` (namespace-aware, attribute-agnostic) instead
+    of regex, and by running both the tracked-changes check and the
+    secret/email body scan across every `word/(document|header*|footer*|
+    footnotes|endnotes).xml` part, not just the main body.
+- Added `tests/test_public_safety_scan.py`: one regression test per fixed
+  finding (each fails against the pre-fix code, passes after), plus a
+  clean-tree false-positive test and two `check_commit_identities()`
+  tests (accept a `noreply@github.com` committer, reject a real address).
+- **Investigated, not fixed:** the 6th finding claimed GitHub's synthetic
+  `pull_request` merge-ref commit (`refs/pull/N/merge`) would have a
+  committer email the scan's allowlist rejected. Verified against this
+  PR's actual live merge ref, fetched directly from GitHub
+  (`refs/pull/17/merge`, commit `74e8094`): committer is
+  `GitHub <noreply@github.com>`, which `ALLOWED_EMAIL_PATTERN` already
+  accepts — via a fix the PR's own second commit (`c57e653`) had already
+  made, before this recovery work began. The review comment was anchored
+  to the PR's first commit and was stale by the time of this recovery. No
+  code change was made for this finding; a hypothesis that cannot be
+  reproduced against the current code is reported as such, not patched.
+
+### Verification
+
+`python -m unittest discover -s tests -v` — 147 tests, `OK (skipped=4)`
+(139 pre-existing + 8 new). `tools/validate_blank_templates.py`,
+`tools/validate_artifact_manifest.py`, and `tools/public_safety_scan.py`
+itself all pass clean (zero false positives) against the real merged
+tree. Each of the 5 fixed findings was reproduced failing against the
+pre-fix code and confirmed passing after, both via an ad hoc throwaway
+fixture repo and via the corresponding committed regression test.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but

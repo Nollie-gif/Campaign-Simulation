@@ -11,6 +11,22 @@ Earlier repository history was not reconstructed into retroactive entries
 here — treat anything before this date as "see Git history," not "see
 CHANGELOG."
 
+## 2026-09-02
+
+- **(engineering)** PR #17's `tools/public_safety_scan.py` was brought
+  forward onto current `main` (merge, not rebase — the branch's 3 existing
+  commits and their review threads were preserved) and its 5 confirmed
+  review defects were fixed as two coherent classes: coverage gaps (a
+  hard-coded text-suffix allowlist skipped `.env`/`.sh`/extensionless
+  files; PDF artifacts were never inspected; DOCX body text was never
+  scanned for secrets/emails) and DOCX parsing fidelity (core-property
+  regexes missed attributed XML elements; tracked-changes detection only
+  looked at `word/document.xml`, missing headers/footers/footnotes). A
+  6th alleged defect (GitHub's synthetic PR merge-ref committer) was
+  investigated against real GitHub PR data and found already fixed by an
+  earlier commit already in the PR — no change made for it. See
+  `ENGINE_CHANGELOG.md` for the full findings disposition and evidence.
+
 ## 2026-08-21
 
 - **(engineering)** Added `AGENT_HANDOFF.md`, this file, and

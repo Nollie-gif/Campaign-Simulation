@@ -1,10 +1,11 @@
 """Mechanically enforce the repository's written public-safety policy.
 
-Scans every tracked file for secret-shaped strings, non-noreply email
-addresses, and (for historical DOCX/PDF artifacts) leftover author metadata
-or comment/tracked-changes parts. This does not replace human judgement or
-the artifact library's own fidelity review; it exists so an obvious mistake
-fails CI instead of waiting for the next manual audit.
+Scans every tracked file for secret-shaped strings and non-noreply email
+addresses, and additionally inspects historical artifact files (DOCX/PDF
+under artifacts/) for leftover author/reviewer metadata, comment or
+tracked-changes parts, and embedded media. This does not replace human
+judgement or the artifact library's own fidelity review; it exists so an
+obvious mistake fails CI instead of waiting for the next manual audit.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -19,11 +21,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 ALLOWED_EMAIL_PATTERN = re.compile(r"^([0-9]+\+[\w-]+@users\.noreply\.github\.com|noreply@github\.com)$")
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
-
-# Text files only; binary artifacts (docx/pdf) get their own metadata check below.
-TEXT_SUFFIXES = {
-    ".py", ".md", ".txt", ".json", ".yml", ".yaml", ".toml", ".cfg", ".ini",
-}
 
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("AWS access key", re.compile(r"AKIA[0-9A-Z]{16}")),
@@ -42,8 +39,23 @@ ARTIFACT_DIRECTORY = ROOT / "artifacts"
 
 # Reviewed, accepted non-personal values already present in the published
 # artifact library. Anything outside this set is treated as a possible
-# personal name/identity and fails the scan.
-ALLOWED_DOCX_METADATA_VALUES = {"", "python-docx", "Mission 10"}
+# personal name/identity and fails the scan. Shared by both DOCX core
+# properties and PDF Info-dictionary metadata keys.
+ALLOWED_METADATA_VALUES = {"", "python-docx", "Mission 10"}
+
+CORE_PROPERTY_NS = {
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+}
+
+# Any Word "story" part that can carry visible/reviewable text and tracked
+# changes, not just the main document body.
+WORD_STORY_PART_PATTERN = re.compile(r"^word/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$")
+
+# Only /Author identifies a person, per the PDF spec's Info dictionary;
+# /Creator and /Producer name the *application* that made the file (e.g.
+# "Notes", "Quartz PDFContext") and are not personal-identity metadata.
+PDF_METADATA_PATTERN = re.compile(rb"/Author\s*\((.*?)(?<!\\)\)", re.DOTALL)
 
 
 def tracked_files() -> list[Path]:
@@ -53,21 +65,26 @@ def tracked_files() -> list[Path]:
     return [ROOT / line for line in output.splitlines() if line]
 
 
+def _scan_text(relative: str, text: str, failures: list[str], *, where: str = "") -> None:
+    suffix = f" {where}" if where else ""
+    for label, pattern in SECRET_PATTERNS:
+        if pattern.search(text):
+            failures.append(f"{relative}:{suffix} possible {label}")
+    for match in EMAIL_PATTERN.finditer(text):
+        email = match.group(0)
+        domain = email.rsplit("@", 1)[-1].lower()
+        if ALLOWED_EMAIL_PATTERN.match(email) or domain in ALLOWED_EMAIL_DOMAINS:
+            continue
+        failures.append(f"{relative}:{suffix} non-noreply email address found ({email})")
+
+
 def scan_text_file(path: Path, failures: list[str]) -> None:
     try:
         text = path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return
     relative = path.relative_to(ROOT).as_posix()
-    for label, pattern in SECRET_PATTERNS:
-        if pattern.search(text):
-            failures.append(f"{relative}: possible {label}")
-    for match in EMAIL_PATTERN.finditer(text):
-        email = match.group(0)
-        domain = email.rsplit("@", 1)[-1].lower()
-        if ALLOWED_EMAIL_PATTERN.match(email) or domain in ALLOWED_EMAIL_DOMAINS:
-            continue
-        failures.append(f"{relative}: non-noreply email address found ({email})")
+    _scan_text(relative, text, failures)
 
 
 def scan_docx_metadata(path: Path, failures: list[str]) -> None:
@@ -82,23 +99,64 @@ def scan_docx_metadata(path: Path, failures: list[str]) -> None:
             if any(name.startswith("word/media/") for name in names):
                 failures.append(f"{relative}: contains embedded media under word/media/")
             if "docProps/core.xml" in names:
-                core = archive.read("docProps/core.xml").decode("utf-8", errors="replace")
-                creator = re.search(r"<dc:creator>(.*?)</dc:creator>", core)
-                modifier = re.search(r"<cp:lastModifiedBy>(.*?)</cp:lastModifiedBy>", core)
-                for field_name, field_match in (("dc:creator", creator), ("cp:lastModifiedBy", modifier)):
-                    value = field_match.group(1).strip() if field_match else ""
-                    if value not in ALLOWED_DOCX_METADATA_VALUES:
-                        failures.append(
-                            f"{relative}: {field_name} is set to an unreviewed value "
-                            f"({value!r}) — add it to ALLOWED_DOCX_METADATA_VALUES only after "
-                            "confirming it is not a personal name"
-                        )
-            if "word/document.xml" in names:
-                doc = archive.read("word/document.xml").decode("utf-8", errors="replace")
-                if "w:ins" in doc or "w:del" in doc:
-                    failures.append(f"{relative}: contains tracked-changes markup (w:ins/w:del)")
+                core_bytes = archive.read("docProps/core.xml")
+                try:
+                    root = ET.fromstring(core_bytes)
+                except ET.ParseError:
+                    failures.append(f"{relative}: docProps/core.xml is not valid XML")
+                else:
+                    creator = root.find("dc:creator", CORE_PROPERTY_NS)
+                    modifier = root.find("cp:lastModifiedBy", CORE_PROPERTY_NS)
+                    for field_name, field_el in (("dc:creator", creator), ("cp:lastModifiedBy", modifier)):
+                        value = (field_el.text or "").strip() if field_el is not None else ""
+                        if value not in ALLOWED_METADATA_VALUES:
+                            failures.append(
+                                f"{relative}: {field_name} is set to an unreviewed value "
+                                f"({value!r}) — add it to ALLOWED_METADATA_VALUES only after "
+                                "confirming it is not a personal name"
+                            )
+            for name in sorted(names):
+                if not WORD_STORY_PART_PATTERN.match(name):
+                    continue
+                content = archive.read(name).decode("utf-8", errors="replace")
+                if "w:ins" in content or "w:del" in content:
+                    failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
+                _scan_text(relative, content, failures, where=f"{name}:")
     except zipfile.BadZipFile:
         failures.append(f"{relative}: not a valid zip/docx container")
+
+
+def _pdf_unescape(raw: bytes) -> str:
+    text = raw.replace(rb"\)", b")").replace(rb"\(", b"(").replace(rb"\\", b"\\")
+    return text.decode("latin-1", errors="replace")
+
+
+def scan_pdf_metadata(path: Path, failures: list[str]) -> None:
+    relative = path.relative_to(ROOT).as_posix()
+    try:
+        data = path.read_bytes()
+    except OSError:
+        failures.append(f"{relative}: could not be read")
+        return
+
+    for match in PDF_METADATA_PATTERN.finditer(data):
+        value = _pdf_unescape(match.group(1)).strip()
+        if value and value not in ALLOWED_METADATA_VALUES:
+            failures.append(
+                f"{relative}: PDF /Author is set to an unreviewed value "
+                f"({value!r}) — add it to ALLOWED_METADATA_VALUES only after "
+                "confirming it is not a personal name"
+            )
+
+    # Scan the raw (undecoded) bytes only: page-content streams are usually
+    # FlateDecode-compressed drawing operators/font data, and decompressing
+    # them for generic email/secret pattern matching produces byte-garbage
+    # false positives, not real text. A secret or address written as plain
+    # PDF text (as in an Info dict, or an uncompressed string object) is
+    # still visible here; one hidden only inside a compressed content
+    # stream is a known, documented gap of this lightweight scanner.
+    text = data.decode("latin-1", errors="replace")
+    _scan_text(relative, text, failures)
 
 
 def check_commit_identities(failures: list[str]) -> None:
@@ -129,10 +187,14 @@ def main() -> int:
     for path in tracked_files():
         if not path.is_file():
             continue
-        if path.suffix.lower() in TEXT_SUFFIXES:
-            scan_text_file(path, failures)
-        elif path.suffix.lower() == ".docx" and ARTIFACT_DIRECTORY in path.parents:
+        is_artifact = ARTIFACT_DIRECTORY in path.parents
+        suffix = path.suffix.lower()
+        if suffix == ".docx" and is_artifact:
             scan_docx_metadata(path, failures)
+        elif suffix == ".pdf" and is_artifact:
+            scan_pdf_metadata(path, failures)
+        else:
+            scan_text_file(path, failures)
 
     check_commit_identities(failures)
 
