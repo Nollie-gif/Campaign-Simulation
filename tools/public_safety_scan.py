@@ -54,7 +54,11 @@ ARTIFACT_DIRECTORY = ROOT / "artifacts"
 # artifact library. Anything outside this set is treated as a possible
 # personal name/identity and fails the scan. Shared by both DOCX core
 # properties and PDF Info-dictionary metadata keys.
-ALLOWED_METADATA_VALUES = {"", "python-docx", "Mission 10"}
+# "Normal"/"Normal.dotm" are Word's default global template names, present
+# in nearly every DOCX; they name no person and reveal no private path. A
+# Template value that *is* a private path (…/Users/<name>/…) is not in this
+# set and still fails.
+ALLOWED_METADATA_VALUES = {"", "python-docx", "Mission 10", "Normal", "Normal.dotm"}
 
 CORE_PROPERTY_NS = {
     "dc": "http://purl.org/dc/elements/1.1/",
@@ -110,8 +114,22 @@ def _scan_text(relative: str, text: str, failures: list[str], *, where: str = ""
 
 def scan_text_file(path: Path, failures: list[str]) -> None:
     try:
-        text = path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+        raw = path.read_bytes()
+    except OSError:
+        return
+    # Windows tooling commonly writes UTF-16; decoding only as UTF-8 would
+    # raise and silently skip the file, leaving its contents unscanned.
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        encodings = ("utf-16", "utf-8")
+    else:
+        encodings = ("utf-8", "utf-16")
+    for encoding in encodings:
+        try:
+            text = raw.decode(encoding)
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    else:
         return
     relative = path.relative_to(ROOT).as_posix()
     _scan_text(relative, text, failures)
@@ -181,14 +199,50 @@ def scan_docx_metadata(path: Path, failures: list[str]) -> None:
                 elif "w:ins" in content or "w:del" in content:
                     failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
                 _scan_text(relative, content, failures, where=f"{name}:")
+            # Extended/custom property parts carry identity and private-path
+            # metadata (Manager, Company, Template, custom properties) that
+            # never appears in core.xml. Artifact DOCX files skip the plain
+            # text scanner, so these parts would otherwise go uninspected.
+            for name in sorted(names):
+                if name not in ("docProps/app.xml", "docProps/custom.xml"):
+                    continue
+                props = archive.read(name).decode("utf-8", errors="replace")
+                _scan_text(relative, props, failures, where=f"{name}:")
+                try:
+                    props_root = ET.fromstring(archive.read(name))
+                except ET.ParseError:
+                    continue
+                for el in props_root.iter():
+                    tag = el.tag.rpartition("}")[2]
+                    value = (el.text or "").strip()
+                    if tag in ("Manager", "Company", "Template") and value:
+                        if value not in ALLOWED_METADATA_VALUES:
+                            failures.append(
+                                f"{relative}: {name} {tag} is set to an unreviewed value "
+                                f"({value!r}) — add it to ALLOWED_METADATA_VALUES only after "
+                                "confirming it is not a personal name or private path"
+                            )
+
             # Relationship parts hold hyperlink targets — a mailto: address,
             # a credential-bearing URL, or a local path lives here, not in
             # any story part.
             for name in sorted(names):
                 if not name.endswith(".rels"):
                     continue
-                rels = archive.read(name).decode("utf-8", errors="replace")
-                _scan_text(relative, rels, failures, where=f"{name}:")
+                rels_bytes = archive.read(name)
+                _scan_text(relative, rels_bytes.decode("utf-8", errors="replace"),
+                           failures, where=f"{name}:")
+                # Targets must be scanned as parsed attribute values: an
+                # entity-encoded address (mailto:alice&#64;…) carries no
+                # literal "@" in the serialized XML, but Word resolves it.
+                try:
+                    rels_root = ET.fromstring(rels_bytes)
+                except ET.ParseError:
+                    continue
+                for el in rels_root.iter():
+                    target = el.get("Target")
+                    if target:
+                        _scan_text(relative, target, failures, where=f"{name} (Target):")
     except zipfile.BadZipFile:
         failures.append(f"{relative}: not a valid zip/docx container")
 

@@ -13,6 +13,11 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** A fourth exact-head-bound review found 3 more gaps:
+  UTF-16 text files (common from Windows tooling) were silently skipped
+  entirely; DOCX extended/custom properties (Manager, Company, Template,
+  custom fields) were never inspected; and a hyperlink address written
+  with an XML entity escaped the relationship-target scan. All fixed.
 - **(engineering)** A third exact-head-bound review found 4 more issues,
   two of them criticisms of earlier fixes in this same effort: the
   scanner's blanket exemption for its own test file (removed entirely —

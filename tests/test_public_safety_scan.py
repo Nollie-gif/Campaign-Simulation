@@ -354,6 +354,72 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         failures = _run_scan(self.repo_root, self.module)
         self.assertTrue(any("AWS access key" in f for f in failures), failures)
 
+    def test_finding19_utf16_text_file_is_decoded_and_scanned(self) -> None:
+        (self.repo_root / "utf16.env").write_text(
+            f"API_KEY=\"{'A' * 25}\"\ncontact {_addr('alice')}\n", encoding="utf-16"
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any(_addr("alice") in f for f in failures), failures)
+
+    def test_finding20_docx_extended_and_custom_properties_are_scanned(self) -> None:
+        private_path = "C:/Users/alice.person/Templates/Normal.dotm"
+        _make_docx(
+            self.repo_root / "artifacts" / "props.docx",
+            extra_parts={
+                "docProps/app.xml": (
+                    '<?xml version="1.0"?><Properties xmlns="http://schemas.'
+                    'openxmlformats.org/officeDocument/2006/extended-properties">'
+                    "<Manager>Alice Person</Manager>"
+                    f"<Template>{private_path}</Template></Properties>"
+                ),
+                "docProps/custom.xml": (
+                    '<?xml version="1.0"?><Properties><property name="Owner">'
+                    f'<vt:lpwstr xmlns:vt="x">{_addr("alice")}</vt:lpwstr>'
+                    "</property></Properties>"
+                ),
+            },
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        joined = "\n".join(failures)
+        self.assertIn("Alice Person", joined)
+        self.assertIn(private_path, joined)
+        self.assertIn(_addr("alice"), joined)
+
+    def test_finding20b_default_word_template_is_not_flagged(self) -> None:
+        _make_docx(
+            self.repo_root / "artifacts" / "default_template.docx",
+            extra_parts={
+                "docProps/app.xml": (
+                    '<?xml version="1.0"?><Properties xmlns="http://schemas.'
+                    'openxmlformats.org/officeDocument/2006/extended-properties">'
+                    "<Template>Normal.dotm</Template></Properties>"
+                ),
+            },
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertEqual(failures, [], "Word's default template name is not sensitive")
+
+    def test_finding21_entity_encoded_rels_target_is_caught(self) -> None:
+        _make_docx(
+            self.repo_root / "artifacts" / "entity_link.docx",
+            extra_parts={
+                "word/_rels/document.xml.rels": (
+                    '<?xml version="1.0"?><Relationships xmlns="http://schemas.'
+                    'openxmlformats.org/package/2006/relationships">'
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/'
+                    'officeDocument/2006/relationships/hyperlink" '
+                    f'Target="mailto:alice&#64;{_COMPANY}" TargetMode="External"/>'
+                    "</Relationships>"
+                ),
+            },
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any(_addr("alice") in f for f in failures), failures)
+
     def test_commit_identities_accept_github_noreply_committer(self) -> None:
         # Empirically confirmed against PR #17's real refs/pull/17/merge:
         # GitHub's synthetic merge commit uses committer "GitHub

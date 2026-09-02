@@ -326,6 +326,50 @@ exemption. `python -m unittest discover -s tests` — 159 tests,
 `OK (skipped=4)`. `tools/public_safety_scan.py` passes clean against the
 real tree with no path exempted.
 
+## 2026-09-02 — public-safety hardening round 5 (fourth exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+Fourth independent Codex review, against exact head `4d63cff`, returned 3
+findings (the per-round count is converging: 5 → 6 → 4 → 3). All three
+reproduced before fixing.
+
+### Change
+
+- **UTF-16 text files were silently skipped**: `read_text(encoding="utf-8")`
+  raised `UnicodeDecodeError` on the common Windows encoding and the
+  handler returned without scanning. Reproduced with a UTF-16 `.env`
+  holding both an API-key assignment and a non-allowlisted address — the
+  scan reported nothing. Now reads bytes and decodes UTF-8/UTF-16, BOM
+  first.
+- **DOCX extended/custom properties were never inspected**: identity and
+  private-path metadata lives in `docProps/app.xml` (`Manager`, `Company`,
+  `Template`) and `docProps/custom.xml`, and artifact DOCX files bypass the
+  plain text scanner, so those parts went unread entirely. Both parts are
+  now scanned, with the three named identity fields checked against
+  `ALLOWED_METADATA_VALUES`.
+- **Relationship targets are now parsed, not string-matched**: round 3
+  scanned `.rels` as serialized XML, so an entity-encoded address
+  (`mailto:alice&#64;…`) carried no literal `@` and evaded `EMAIL_PATTERN`
+  even though Word resolves it. `Target` attribute values are now scanned
+  as parsed (entity-decoded) values.
+
+Adding the `Template` check immediately produced 13 false positives across
+the real artifact library, where the value is Word's default global
+template (`Normal` / `Normal.dotm`). Those two names were added to
+`ALLOWED_METADATA_VALUES` after confirming they name no person and reveal
+no path; a `Template` that *is* a private path (`…/Users/<name>/…`) is
+still flagged, and a regression test pins both behaviours.
+
+### Verification
+
+All 3 findings reproduced failing before the fix and passing after.
+`python -m unittest discover -s tests` — 163 tests, `OK (skipped=4)`.
+`tools/public_safety_scan.py` passes clean against the real tree.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but
