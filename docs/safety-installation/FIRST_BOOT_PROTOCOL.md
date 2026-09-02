@@ -4,6 +4,8 @@
 
 Provide a short, consent-driven installation sequence for DMs who may have no software-engineering background. The sequence is intentionally multi-turn. Do not collapse consent, configuration, installation, and verification into one reply.
 
+**Scope:** this installs into a DM's own campaign runtime — a separate repository/directory from Campaign-Simulation's own source. It is not the workflow for changing this framework repository's own code, schema, docs, or CI; that is Flight Control, described in [`AGENT_HANDOFF.md`](../../AGENT_HANDOFF.md).
+
 ## State 0 — Detection
 
 Check for a verified compatible receipt at `.campaign-simulation/safety-installation.json`.

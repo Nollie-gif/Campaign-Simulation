@@ -4,6 +4,8 @@ This folder defines the optional first-boot safety layer for future campaign eng
 
 The safety layer exists so a DM can describe **what** they want to build while the AI plans the work and protected infrastructure controls **how** sensitive changes are executed. It is not a gameplay gate, a second source of campaign truth, or permission to mutate production.
 
+**Scope:** this installs into a DM's own campaign runtime — a separate repository/directory from Campaign-Simulation's own source. It is not the workflow for changing this framework repository's own code, schema, docs, or CI; that is Flight Control, described in [`AGENT_HANDOFF.md`](../../AGENT_HANDOFF.md). If a request is about engineering *this* repository, use Flight Control even if it is phrased the way the [LotS Safe Build Prompt](LOTS_SAFE_BUILD_PROMPT.md) phrases a gameplay request — classify by which repository the change targets, not by the request's wording alone.
+
 ## First-boot contract
 
 On boot, check the selected runtime for a verified installation receipt at:

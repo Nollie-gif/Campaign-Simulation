@@ -1,0 +1,28 @@
+#!/bin/sh
+# Campaign-Simulation Engineering Flight Control: require matching local COMMIT-READY evidence.
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# The "py" launcher is a Windows-only convention (py.exe). On POSIX systems
+# an unrelated executable named "py" can exist on PATH; if it rejects "-3"
+# the hook would exit immediately instead of falling through to python3 or
+# python, blocking every commit. Only consider "py" on Windows-family
+# shells (MSYS/MinGW/Cygwin under Git for Windows).
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*)
+    if command -v py >/dev/null 2>&1; then
+      exec py -3 scripts/preflight_commit.py --verify-marker
+    fi
+    ;;
+esac
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 scripts/preflight_commit.py --verify-marker
+fi
+if command -v python >/dev/null 2>&1; then
+  exec python scripts/preflight_commit.py --verify-marker
+fi
+
+echo "STOP-PYTHON-NOT-FOUND: Cannot verify Campaign-Simulation COMMIT-READY evidence." >&2
+exit 1

@@ -2,6 +2,8 @@
 
 > Choose the quest objective. Let the agent plan. Let protected infrastructure execute.
 
+**Scope:** for building or changing systems inside a DM's own campaign runtime — not for engineering Campaign-Simulation's own framework source. A request aimed at this repository's own code/schema/docs/CI uses Flight Control (`AGENT_HANDOFF.md`) instead, even if it happens to be phrased the way the prompt below is phrased.
+
 Copy and paste the following into a fresh campaign engineering chat.
 
 ---
