@@ -10,6 +10,7 @@ obvious mistake fails CI instead of waiting for the next manual audit.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -55,7 +56,11 @@ WORD_STORY_PART_PATTERN = re.compile(r"^word/(document|header\d*|footer\d*|footn
 # Only /Author identifies a person, per the PDF spec's Info dictionary;
 # /Creator and /Producer name the *application* that made the file (e.g.
 # "Notes", "Quartz PDFContext") and are not personal-identity metadata.
-PDF_METADATA_PATTERN = re.compile(rb"/Author\s*\((.*?)(?<!\\)\)", re.DOTALL)
+# A PDF string can be written as a parenthesized literal OR a hex string
+# (PDF 32000-1:2008, 7.9.2.2/7.9.2.4) — Unicode text strings are commonly
+# hex-encoded UTF-16BE with a leading FEFF BOM — so both forms are checked.
+PDF_METADATA_LITERAL_PATTERN = re.compile(rb"/Author\s*\((.*?)(?<!\\)\)", re.DOTALL)
+PDF_METADATA_HEX_PATTERN = re.compile(rb"/Author\s*<([0-9A-Fa-f\s]*)>")
 
 # This scanner's own regression suite deliberately embeds secret-shaped
 # strings and non-noreply sample emails as fixtures to prove detection
@@ -123,8 +128,29 @@ def scan_docx_metadata(path: Path, failures: list[str]) -> None:
             for name in sorted(names):
                 if not WORD_STORY_PART_PATTERN.match(name):
                     continue
-                content = archive.read(name).decode("utf-8", errors="replace")
-                if "w:ins" in content or "w:del" in content:
+                content_bytes = archive.read(name)
+                content = content_bytes.decode("utf-8", errors="replace")
+                try:
+                    story_root = ET.fromstring(content_bytes)
+                except ET.ParseError:
+                    story_root = None
+                if story_root is not None:
+                    # Element-name match (not a "w:ins"/"w:del" substring
+                    # search, which also matches unrelated field codes like
+                    # <w:instrText>) for the real tracked-change elements.
+                    if any(el.tag.rpartition("}")[2] in ("ins", "del") for el in story_root.iter()):
+                        failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
+                    # Word displays adjacent <w:t> runs as one continuous
+                    # string with no separator, so a secret/email split
+                    # across runs by formatting is joined the same way
+                    # before scanning — the raw-XML scan below would miss it.
+                    joined_text = "".join(
+                        el.text for el in story_root.iter()
+                        if el.tag.rpartition("}")[2] == "t" and el.text
+                    )
+                    if joined_text:
+                        _scan_text(relative, joined_text, failures, where=f"{name} (joined text):")
+                elif "w:ins" in content or "w:del" in content:
                     failures.append(f"{relative}: {name} contains tracked-changes markup (w:ins/w:del)")
                 _scan_text(relative, content, failures, where=f"{name}:")
     except zipfile.BadZipFile:
@@ -136,6 +162,16 @@ def _pdf_unescape(raw: bytes) -> str:
     return text.decode("latin-1", errors="replace")
 
 
+def _pdf_decode_hex_string(raw: bytes) -> str:
+    try:
+        data = bytes.fromhex(re.sub(rb"\s+", b"", raw).decode("ascii"))
+    except ValueError:
+        return ""
+    if data.startswith(b"\xfe\xff"):
+        return data[2:].decode("utf-16-be", errors="replace")
+    return data.decode("latin-1", errors="replace")
+
+
 def scan_pdf_metadata(path: Path, failures: list[str]) -> None:
     relative = path.relative_to(ROOT).as_posix()
     try:
@@ -144,8 +180,13 @@ def scan_pdf_metadata(path: Path, failures: list[str]) -> None:
         failures.append(f"{relative}: could not be read")
         return
 
-    for match in PDF_METADATA_PATTERN.finditer(data):
-        value = _pdf_unescape(match.group(1)).strip()
+    author_values = [
+        _pdf_unescape(match.group(1)) for match in PDF_METADATA_LITERAL_PATTERN.finditer(data)
+    ] + [
+        _pdf_decode_hex_string(match.group(1)) for match in PDF_METADATA_HEX_PATTERN.finditer(data)
+    ]
+    for raw_value in author_values:
+        value = raw_value.strip()
         if value and value not in ALLOWED_METADATA_VALUES:
             failures.append(
                 f"{relative}: PDF /Author is set to an unreviewed value "
@@ -164,14 +205,29 @@ def scan_pdf_metadata(path: Path, failures: list[str]) -> None:
     _scan_text(relative, text, failures)
 
 
+_NULL_SHA = "0" * 40
+
+
 def check_commit_identities(failures: list[str]) -> None:
-    base = subprocess.run(
-        ["git", "merge-base", "HEAD", "origin/main"],
-        cwd=ROOT, capture_output=True, text=True,
-    )
-    if base.returncode != 0:
-        return
-    merge_base = base.stdout.strip()
+    # On a direct push to main, actions/checkout leaves origin/main pointing
+    # at the same commit as HEAD (the push already landed before CI ran), so
+    # `merge-base HEAD origin/main` is HEAD itself and `git log HEAD..HEAD`
+    # is empty — the pushed commit's own identity would never be checked.
+    # CI passes the pre-push SHA (`github.event.before`) via this env var so
+    # a direct push to main is checked against its real prior state; a PR's
+    # merge-base-vs-origin/main logic below is unaffected (the env var is
+    # only set for push events) and unused/local runs fall back to it too.
+    override_base = os.environ.get("PUBLIC_SAFETY_COMMIT_RANGE_BASE", "").strip()
+    if override_base and override_base != _NULL_SHA:
+        merge_base = override_base
+    else:
+        base = subprocess.run(
+            ["git", "merge-base", "HEAD", "origin/main"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        if base.returncode != 0:
+            return
+        merge_base = base.stdout.strip()
     log = subprocess.run(
         ["git", "log", f"{merge_base}..HEAD", "--format=%H %ae %ce"],
         cwd=ROOT, capture_output=True, text=True, check=True,

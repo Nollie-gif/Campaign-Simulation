@@ -124,6 +124,78 @@ GitHub-token-shaped string, and 4 sample emails. After the fix,
 `python tools/public_safety_scan.py` passes clean locally and
 `python -m unittest discover -s tests` still reports `OK (skipped=4)`.
 
+## 2026-09-02 — public-safety hardening round 2 (fresh exact-head Codex review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+Per Gate 10, an independent Codex review was explicitly requested (`@codex
+review` PR comment) bound to the exact pushed head `7983e5b`, rather than
+relying on the two stale review threads from 2026-08-21. It returned 5 new
+findings, all anchored with `original_commit_id == commit_id == 7983e5b`
+(genuinely fresh, not GitHub's auto-remap of an old thread). Each was
+reproduced against a throwaway fixture before being treated as confirmed,
+per the same discipline used for the earlier Finding #3 investigation.
+
+### Change
+
+- **Supply-chain pin** (`.github/workflows/secret-scan.yml`): the
+  scheduled/manual full-history gitleaks job used floating
+  `actions/checkout@v4` and `gitleaks/gitleaks-action@v2` tags while every
+  other workflow in the repo is SHA-pinned. Pinned both to the commit SHAs
+  those tags currently resolve to (`actions/checkout` — the same SHA
+  already used elsewhere; `gitleaks/gitleaks-action` —
+  `ff98106e4c7b2bc287b24eaf42907196329070c7`, i.e. v2.3.9).
+- **Push-to-main identity-check gap** (`check_commit_identities()`): on a
+  `push` event, `actions/checkout` leaves `origin/main` pointing at the
+  same commit as `HEAD` (the push already landed before CI ran), so
+  `git merge-base HEAD origin/main` is `HEAD` itself and
+  `git log HEAD..HEAD` is empty — a directly-pushed commit to `main` with a
+  personal identity would never be checked. Reproduced with a bare-origin
+  simulation before fixing. Fixed by reading an optional
+  `PUBLIC_SAFETY_COMMIT_RANGE_BASE` env var (set only for `push` events in
+  `tests.yml`, from `github.event.before`, with the all-zero "new branch"
+  SHA treated as absent) as the diff base instead of the merge-base
+  computation; `pull_request` and local/unset runs are unaffected and keep
+  the existing merge-base logic.
+- **PDF hex-string `/Author`**: the PDF spec allows a string to be written
+  as a parenthesized literal or a hex string (commonly UTF-16BE with a
+  `FEFF` BOM for Unicode); the scanner only matched the literal form, so a
+  hex-encoded personal name in `/Author` passed silently. Added
+  `PDF_METADATA_HEX_PATTERN` + `_pdf_decode_hex_string()` alongside the
+  existing literal-form check.
+  - **DOCX text split across adjacent runs / instrText false positive**:
+  two related parsing-fidelity gaps in the same story-part loop. (a) The
+  body/header/footer scan ran regexes against raw serialized XML, so an
+  email or secret split across adjacent `<w:t>` runs by formatting (e.g.
+  `alice@real-` / `company.com` in separate runs, which Word still
+  displays as one continuous string) was never joined and so never
+  matched. (b) Tracked-changes detection used a `"w:ins" in content`
+  substring test, which also matches unrelated field codes like
+  `<w:instrText>` (e.g. a plain PAGE field), flagging documents with no
+  real tracked changes. Fixed both by parsing each story part with
+  `ElementTree` once: real `ins`/`del` elements are matched by local tag
+  name (not substring), and adjacent `<w:t>` element text is joined in
+  document order and scanned as one string; a part that fails to parse as
+  XML falls back to the old substring check rather than being silently
+  skipped.
+- Added 4 new regression tests (findings 7–10, continuing the existing
+  numbering) to `tests/test_public_safety_scan.py`, one per confirmed
+  finding above; each reproduces the pre-fix gap and confirms the fix.
+
+### Verification
+
+Each of the 4 code-level findings (identity-check gap, PDF hex author,
+split-run text, instrText false positive) was reproduced failing against
+an ad hoc throwaway fixture before the fix and confirmed passing after,
+both in the ad hoc repro and in the corresponding committed regression
+test. The 5th (unpinned secret-scan actions) was a static config fact,
+verified by direct inspection, no repro needed. `python -m unittest
+discover -s tests` — 151 tests, `OK (skipped=4)` (147 prior + 4 new).
+`tools/public_safety_scan.py` passes clean against the real tree.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but

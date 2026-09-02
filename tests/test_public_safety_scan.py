@@ -16,6 +16,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCAN_PATH = ROOT / "tools" / "public_safety_scan.py"
@@ -157,6 +158,93 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         self._commit()
         failures = _run_scan(self.repo_root, self.module)
         self.assertTrue(any("header1.xml" in f and "tracked-changes" in f for f in failures))
+
+    def test_finding7_docx_instrtext_field_is_not_a_tracked_change(self) -> None:
+        # A plain PAGE field uses <w:instrText>, which contains "w:ins" as a
+        # substring — must not be mistaken for a real <w:ins> tracked change.
+        _make_docx(
+            self.repo_root / "artifacts" / "field_code.docx",
+            document_xml=(
+                '<?xml version="1.0"?><w:document xmlns:w="ns"><w:body>'
+                "<w:p><w:r><w:instrText> PAGE </w:instrText></w:r></w:p>"
+                "</w:body></w:document>"
+            ),
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertFalse(any("tracked-changes" in f for f in failures), failures)
+
+    def test_finding8_docx_email_split_across_adjacent_runs_is_caught(self) -> None:
+        _make_docx(
+            self.repo_root / "artifacts" / "split_run.docx",
+            document_xml=(
+                '<?xml version="1.0"?><w:document xmlns:w="ns"><w:body><w:p>'
+                "<w:r><w:t>alice@real-</w:t></w:r><w:r><w:t>company.com</w:t></w:r>"
+                "</w:p></w:body></w:document>"
+            ),
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("alice@real-company.com" in f for f in failures), failures)
+
+    def test_finding9_pdf_hex_encoded_author_is_caught(self) -> None:
+        name = "Alice Person"
+        hexstr = ("FEFF" + name.encode("utf-16-be").hex()).upper().encode("ascii")
+        pdf_bytes = (
+            b"%PDF-1.4\n1 0 obj\n<< /Author <" + hexstr + b"> /Title (Doc) >>\nendobj\n"
+            b"trailer\n<< /Info 1 0 R >>\n%%EOF"
+        )
+        (self.repo_root / "artifacts" / "hex_author.pdf").write_bytes(pdf_bytes)
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("Alice Person" in f for f in failures), failures)
+
+    def test_finding10_push_range_override_catches_direct_main_push(self) -> None:
+        # Simulates actions/checkout on a `push` to main: origin/main and
+        # HEAD point at the identical commit (the push already landed
+        # before CI ran), so merge-base-based diffing sees an empty range
+        # and would miss the pushed commit's own identity without the
+        # PUBLIC_SAFETY_COMMIT_RANGE_BASE override CI supplies.
+        subprocess.run(["git", "checkout", "-qb", "main"], cwd=self.repo_root, check=True)
+        (self.repo_root / "base.txt").write_text("base\n")
+        self._commit()
+        before_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        (self.repo_root / "feature.txt").write_text("feature\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(
+            [
+                "git", "-c", "user.email=real.human@example-not-noreply.com", "-c", "user.name=Real Human",
+                "commit", "-q", "-m", "direct push to main",
+            ],
+            cwd=self.repo_root, check=True,
+        )
+        pushed_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        subprocess.run(["git", "remote", "add", "origin", str(self.repo_root)], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=self.repo_root, check=True)
+        # origin/main == HEAD, matching what a real push-triggered checkout sees.
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", pushed_sha], cwd=self.repo_root, check=True)
+
+        self.module.ROOT = self.repo_root
+
+        without_override: list[str] = []
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os as _os
+            _os.environ.pop("PUBLIC_SAFETY_COMMIT_RANGE_BASE", None)
+            self.module.check_commit_identities(without_override)
+        self.assertEqual(without_override, [], "expected the pre-fix gap: empty range without override")
+
+        with_override: list[str] = []
+        with mock.patch.dict("os.environ", {"PUBLIC_SAFETY_COMMIT_RANGE_BASE": before_sha}):
+            self.module.check_commit_identities(with_override)
+        self.assertTrue(
+            any("real.human@example-not-noreply.com" in f for f in with_override), with_override
+        )
 
     def test_commit_identities_accept_github_noreply_committer(self) -> None:
         # Empirically confirmed against PR #17's real refs/pull/17/merge:

@@ -13,6 +13,15 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** A fresh, exact-head-bound independent review of PR #17
+  found 5 more real gaps, each reproduced before fixing: unpinned actions
+  in the scheduled secret-scan workflow; a direct push to `main` could
+  bypass the new commit-identity check entirely; a PDF's `/Author` could
+  be hex-encoded instead of a plain string and pass silently; an
+  email/secret split across adjacent Word runs by formatting wasn't
+  joined before scanning; and an ordinary Word field (e.g. a page-number
+  field) could be misidentified as a tracked change. See
+  `ENGINE_CHANGELOG.md`.
 - **(engineering)** Fixed a public-safety scanner self-scan false positive
   caught by real CI on PR #17 after the fix below was pushed: removing the
   old suffix allowlist meant the scanner started flagging its own

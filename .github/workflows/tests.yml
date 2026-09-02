@@ -40,6 +40,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run public-safety scan
+        env:
+          PUBLIC_SAFETY_COMMIT_RANGE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: python tools/public_safety_scan.py
 
   change-ledger:
