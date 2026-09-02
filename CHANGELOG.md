@@ -11,6 +11,57 @@ Earlier repository history was not reconstructed into retroactive entries
 here — treat anything before this date as "see Git history," not "see
 CHANGELOG."
 
+## 2026-09-02
+
+- **(engineering)** A fourth exact-head-bound review found 3 more gaps:
+  UTF-16 text files (common from Windows tooling) were silently skipped
+  entirely; DOCX extended/custom properties (Manager, Company, Template,
+  custom fields) were never inspected; and a hyperlink address written
+  with an XML entity escaped the relationship-target scan. All fixed.
+- **(engineering)** A third exact-head-bound review found 4 more issues,
+  two of them criticisms of earlier fixes in this same effort: the
+  scanner's blanket exemption for its own test file (removed entirely —
+  fixtures are now assembled at runtime so nothing is exempt), and text
+  being joined across paragraph and tab boundaries, inventing addresses
+  the document never displays. GitHub bot no-reply addresses are now
+  accepted too. One further finding — history-range scanning — is
+  deliberately deferred with reasoning recorded in `ENGINE_CHANGELOG.md`.
+- **(engineering)** A second exact-head-bound review found 6 more gaps,
+  each reproduced before fixing — most materially, a tracked file whose
+  name contains non-ASCII characters was silently never scanned at all
+  (Git quotes such names, and the resulting path didn't resolve). Also:
+  the scan job could be weakened by the very PR it was grading; unquoted
+  `KEY=value` secrets were missed; DOCX hyperlink targets and PDF XMP
+  author metadata were never inspected; and GitHub's legacy no-reply
+  address format was wrongly rejected. See `ENGINE_CHANGELOG.md`.
+- **(engineering)** A fresh, exact-head-bound independent review of PR #17
+  found 5 more real gaps, each reproduced before fixing: unpinned actions
+  in the scheduled secret-scan workflow; a direct push to `main` could
+  bypass the new commit-identity check entirely; a PDF's `/Author` could
+  be hex-encoded instead of a plain string and pass silently; an
+  email/secret split across adjacent Word runs by formatting wasn't
+  joined before scanning; and an ordinary Word field (e.g. a page-number
+  field) could be misidentified as a tracked change. See
+  `ENGINE_CHANGELOG.md`.
+- **(engineering)** Fixed a public-safety scanner self-scan false positive
+  caught by real CI on PR #17 after the fix below was pushed: removing the
+  old suffix allowlist meant the scanner started flagging its own
+  regression test's deliberate secret-shaped/email-shaped fixtures. See
+  `ENGINE_CHANGELOG.md`.
+- **(engineering)** PR #17's `tools/public_safety_scan.py` was brought
+  forward onto current `main` (merge, not rebase — the branch's 3 existing
+  commits and their review threads were preserved) and its 5 confirmed
+  review defects were fixed as two coherent classes: coverage gaps (a
+  hard-coded text-suffix allowlist skipped `.env`/`.sh`/extensionless
+  files; PDF artifacts were never inspected; DOCX body text was never
+  scanned for secrets/emails) and DOCX parsing fidelity (core-property
+  regexes missed attributed XML elements; tracked-changes detection only
+  looked at `word/document.xml`, missing headers/footers/footnotes). A
+  6th alleged defect (GitHub's synthetic PR merge-ref committer) was
+  investigated against real GitHub PR data and found already fixed by an
+  earlier commit already in the PR — no change made for it. See
+  `ENGINE_CHANGELOG.md` for the full findings disposition and evidence.
+
 ## 2026-08-21
 
 - **(engineering)** Added `AGENT_HANDOFF.md`, this file, and

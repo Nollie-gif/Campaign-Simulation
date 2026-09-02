@@ -12,6 +12,364 @@ anything before that date.
 
 ---
 
+## 2026-09-02 — PR #17 recovery: forward-port + confirmed-defect fixes (Gate 10)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+PR #17 (`tools/public_safety_scan.py` + `public-safety` CI job) had been
+open since 2026-08-21, unmergeable (`CONFLICTING` against current `main`,
+which had since gained SHA-pinned Actions and the change-ledger CI job),
+with 6 unresolved `chatgpt-codex-connector` review threads. Per live Asana
+Gate 10 (Campaign-Simulation — Control Room, GID 1217845405841717), the
+goal was to finish this PR without rewriting history or merging an
+incomplete security control, resolving findings as reproduced fact rather
+than by blind single-example patching.
+
+### Change
+
+- Merged current `main` (`890f298`) into
+  `hardening/public-safety-ci-gate` (merge commit, not rebase — preserves
+  the branch's original 3 commits and every review thread's anchor SHA).
+  The only real conflict was `.github/workflows/tests.yml`: resolved by
+  keeping both the `public-safety` job (this branch) and the
+  `change-ledger` job (`main`), and re-pinning `public-safety`'s
+  `actions/checkout`/`actions/setup-python` to the same commit SHAs `main`
+  already uses instead of the branch's original floating `@v4`/`@v5` tags.
+- Fixed 5 of 6 open review findings in `tools/public_safety_scan.py`,
+  each reproduced against a throwaway fixture repo before being treated
+  as confirmed, grouped as two coherent classes:
+  - **Coverage gaps** (findings: text-suffix allowlist skipped
+    `.env`/shell/extensionless files; PDF artifacts under `artifacts/`
+    were never opened; DOCX body text was sent only to the metadata
+    check, never to the secret/email scan). Fixed by dropping the
+    suffix allowlist (every non-artifact-binary tracked file now goes
+    through the same text scan; a file that fails UTF-8 decoding is
+    silently skipped, same as before) and adding `scan_pdf_metadata()`
+    (checks `/Author` — the PDF spec's personal-identity field, unlike
+    `/Creator`/`/Producer` which name the authoring *application* — plus
+    the same secret/email scan against the PDF's raw bytes).
+  - **DOCX parsing fidelity** (findings: `dc:creator`/`cp:lastModifiedBy`
+    regexes used exact open/close tags and missed a valid attributed form
+    like `<dc:creator xml:space="preserve">…`; tracked-changes detection
+    only inspected `word/document.xml`, missing headers/footers/
+    footnotes/endnotes). Fixed by parsing `docProps/core.xml` with
+    `xml.etree.ElementTree` (namespace-aware, attribute-agnostic) instead
+    of regex, and by running both the tracked-changes check and the
+    secret/email body scan across every `word/(document|header*|footer*|
+    footnotes|endnotes).xml` part, not just the main body.
+- Added `tests/test_public_safety_scan.py`: one regression test per fixed
+  finding (each fails against the pre-fix code, passes after), plus a
+  clean-tree false-positive test and two `check_commit_identities()`
+  tests (accept a `noreply@github.com` committer, reject a real address).
+- **Investigated, not fixed:** the 6th finding claimed GitHub's synthetic
+  `pull_request` merge-ref commit (`refs/pull/N/merge`) would have a
+  committer email the scan's allowlist rejected. Verified against this
+  PR's actual live merge ref, fetched directly from GitHub
+  (`refs/pull/17/merge`, commit `74e8094`): committer is
+  `GitHub <noreply@github.com>`, which `ALLOWED_EMAIL_PATTERN` already
+  accepts — via a fix the PR's own second commit (`c57e653`) had already
+  made, before this recovery work began. The review comment was anchored
+  to the PR's first commit and was stale by the time of this recovery. No
+  code change was made for this finding; a hypothesis that cannot be
+  reproduced against the current code is reported as such, not patched.
+
+### Verification
+
+`python -m unittest discover -s tests -v` — 147 tests, `OK (skipped=4)`
+(139 pre-existing + 8 new). `tools/validate_blank_templates.py`,
+`tools/validate_artifact_manifest.py`, and `tools/public_safety_scan.py`
+itself all pass clean (zero false positives) against the real merged
+tree. Each of the 5 fixed findings was reproduced failing against the
+pre-fix code and confirmed passing after, both via an ad hoc throwaway
+fixture repo and via the corresponding committed regression test.
+
+## 2026-09-02 — public-safety self-scan false positive (real CI, PR #17)
+
+**Category:** CI correctness fix (public-safety scanner)
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+After pushing the Gate 10 recovery commit (`6f428e2`) and letting real GitHub
+Actions CI run on PR #17 (not a local simulation), the `public-safety` job
+failed on both `push` and `pull_request` triggers. This was independent of
+the Finding #3 (synthetic merge-ref committer) investigation recorded above,
+which was correctly *not* reproducible — this was a separate, new defect
+introduced by this recovery's own Finding-1 fix.
+
+### Change
+
+Removing the old text-suffix allowlist (per the Finding-1 fix above) means
+`tools/public_safety_scan.py` now scans every tracked non-artifact-binary
+file, including its own new regression suite,
+`tests/test_public_safety_scan.py`, which deliberately embeds
+secret-shaped strings (`AKIA...`, `github_pat_...`) and non-noreply sample
+emails as fixtures to prove detection works. The scanner correctly
+mechanically flagged its own test fixtures as if they were leaked
+material. Fixed by adding `SELF_TEST_FIXTURE_PATH` and skipping that exact
+path in both `main()`'s dispatch loop and the test suite's own `_run_scan()`
+harness, with a comment documenting why (not real secrets, not general
+suppression).
+
+### Verification
+
+Reproduced directly from real CI logs on PR #17 (run `33654734706`, job
+`public-safety`, head `6f428e2`, checked out at synthetic merge ref
+`83a8655`): `tools/public_safety_scan.py` exited 1, flagging
+`tests/test_public_safety_scan.py` for an AWS-key-shaped string, a
+GitHub-token-shaped string, and 4 sample emails. After the fix,
+`python tools/public_safety_scan.py` passes clean locally and
+`python -m unittest discover -s tests` still reports `OK (skipped=4)`.
+
+## 2026-09-02 — public-safety hardening round 2 (fresh exact-head Codex review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+Per Gate 10, an independent Codex review was explicitly requested (`@codex
+review` PR comment) bound to the exact pushed head `7983e5b`, rather than
+relying on the two stale review threads from 2026-08-21. It returned 5 new
+findings, all anchored with `original_commit_id == commit_id == 7983e5b`
+(genuinely fresh, not GitHub's auto-remap of an old thread). Each was
+reproduced against a throwaway fixture before being treated as confirmed,
+per the same discipline used for the earlier Finding #3 investigation.
+
+### Change
+
+- **Supply-chain pin** (`.github/workflows/secret-scan.yml`): the
+  scheduled/manual full-history gitleaks job used floating
+  `actions/checkout@v4` and `gitleaks/gitleaks-action@v2` tags while every
+  other workflow in the repo is SHA-pinned. Pinned both to the commit SHAs
+  those tags currently resolve to (`actions/checkout` — the same SHA
+  already used elsewhere; `gitleaks/gitleaks-action` —
+  `ff98106e4c7b2bc287b24eaf42907196329070c7`, i.e. v2.3.9).
+- **Push-to-main identity-check gap** (`check_commit_identities()`): on a
+  `push` event, `actions/checkout` leaves `origin/main` pointing at the
+  same commit as `HEAD` (the push already landed before CI ran), so
+  `git merge-base HEAD origin/main` is `HEAD` itself and
+  `git log HEAD..HEAD` is empty — a directly-pushed commit to `main` with a
+  personal identity would never be checked. Reproduced with a bare-origin
+  simulation before fixing. Fixed by reading an optional
+  `PUBLIC_SAFETY_COMMIT_RANGE_BASE` env var (set only for `push` events in
+  `tests.yml`, from `github.event.before`, with the all-zero "new branch"
+  SHA treated as absent) as the diff base instead of the merge-base
+  computation; `pull_request` and local/unset runs are unaffected and keep
+  the existing merge-base logic.
+- **PDF hex-string `/Author`**: the PDF spec allows a string to be written
+  as a parenthesized literal or a hex string (commonly UTF-16BE with a
+  `FEFF` BOM for Unicode); the scanner only matched the literal form, so a
+  hex-encoded personal name in `/Author` passed silently. Added
+  `PDF_METADATA_HEX_PATTERN` + `_pdf_decode_hex_string()` alongside the
+  existing literal-form check.
+  - **DOCX text split across adjacent runs / instrText false positive**:
+  two related parsing-fidelity gaps in the same story-part loop. (a) The
+  body/header/footer scan ran regexes against raw serialized XML, so an
+  email or secret split across adjacent `<w:t>` runs by formatting (e.g.
+  `alice@real-` / `company.com` in separate runs, which Word still
+  displays as one continuous string) was never joined and so never
+  matched. (b) Tracked-changes detection used a `"w:ins" in content`
+  substring test, which also matches unrelated field codes like
+  `<w:instrText>` (e.g. a plain PAGE field), flagging documents with no
+  real tracked changes. Fixed both by parsing each story part with
+  `ElementTree` once: real `ins`/`del` elements are matched by local tag
+  name (not substring), and adjacent `<w:t>` element text is joined in
+  document order and scanned as one string; a part that fails to parse as
+  XML falls back to the old substring check rather than being silently
+  skipped.
+- Added 4 new regression tests (findings 7–10, continuing the existing
+  numbering) to `tests/test_public_safety_scan.py`, one per confirmed
+  finding above; each reproduces the pre-fix gap and confirms the fix.
+
+### Verification
+
+Each of the 4 code-level findings (identity-check gap, PDF hex author,
+split-run text, instrText false positive) was reproduced failing against
+an ad hoc throwaway fixture before the fix and confirmed passing after,
+both in the ad hoc repro and in the corresponding committed regression
+test. The 5th (unpinned secret-scan actions) was a static config fact,
+verified by direct inspection, no repro needed. `python -m unittest
+discover -s tests` — 151 tests, `OK (skipped=4)` (147 prior + 4 new).
+`tools/public_safety_scan.py` passes clean against the real tree.
+
+## 2026-09-02 — public-safety hardening round 3 (second exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+A second independent Codex review, requested against exact head `1e18711`
+after round 2's fixes went green in CI, returned 6 further findings (all
+`original_commit_id == 1e18711`). Each was reproduced before being fixed.
+
+### Change
+
+- **Self-grading gate** (`.github/workflows/tests.yml`): the
+  `public-safety` job ran the scanner *from the PR's own merge tree*, so a
+  PR could weaken the scanner in the same commit that adds the material
+  the gate exists to reject. Adopted the identical trusted-base idiom the
+  `change-ledger` job already uses — restore `tools/public_safety_scan.py`
+  from `origin/main` when it exists there. This is inert on this PR (the
+  scanner is not on `main` yet) and becomes self-protecting the moment
+  this PR merges.
+- **Unquoted secret assignments**: the generic API-key pattern required
+  quotes around the value, so the ordinary dotenv/shell form
+  (`OPENAI_API_KEY=sk-proj-…`, `secret=…`) never matched. Quotes are now
+  optional. Keyword list deliberately unchanged, to avoid widening
+  false-positive surface beyond the confirmed finding.
+- **DOCX relationship targets**: hyperlink targets live in relationship
+  parts (`word/_rels/document.xml.rels`), which the story-part loop never
+  read — a `mailto:` personal address or credential-bearing URL passed
+  untouched. All `.rels` parts are now scanned.
+- **PDF XMP authorship**: a PDF can record its author only in an XMP
+  packet (`dc:creator`) with no Info-dictionary `/Author` at all; both
+  existing patterns missed it and a personal name is not secret-shaped, so
+  the file passed clean. Added XMP `dc:creator`/`rdf:li` extraction.
+  Compressed XMP packets remain the same documented gap as compressed
+  content streams.
+- **Non-ASCII tracked filenames**: with Git's default `core.quotePath`,
+  `git ls-files` renders such a name C-escaped and quoted
+  (`"r\303\251sum\303\251.env"`); the resulting `Path` does not exist, so
+  `main()` silently skipped the file and never scanned its contents.
+  Reproduced with a real AWS-key-bearing file that scanned clean. Switched
+  to `git ls-files -z` with NUL-delimited decoding. This is the most
+  material of the six: it silently disabled scanning per-file, and this
+  repository's artifact library does carry non-ASCII names.
+- **Legacy GitHub noreply identities**: `ALLOWED_EMAIL_PATTERN` accepted
+  only the modern numeric-id noreply form, so a contributor using the
+  legitimate legacy bare-username noreply address would have every commit
+  rejected. Both forms are now accepted.
+- Added 5 new regression tests (findings 11–15) to
+  `tests/test_public_safety_scan.py`.
+
+### Verification
+
+All 6 findings reproduced against throwaway fixtures before fixing and
+confirmed fixed after (the filename finding visibly: the constructed path
+went from nonexistent to resolving, and its AWS key from unscanned to
+flagged). Fixing the noreply pattern initially introduced a self-scan
+false positive — the explanatory comment contained a literal
+address-shaped example the scanner correctly rejected — caught by running
+the scanner on the real tree before commit and fixed by rewording.
+`python -m unittest discover -s tests` — 156 tests, `OK (skipped=4)`.
+`tools/public_safety_scan.py` passes clean against the real tree.
+
+## 2026-09-02 — public-safety hardening round 4 (third exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+A third independent Codex review against exact head `b9c77b3` returned 4
+findings, two of which were criticisms of fixes made in earlier rounds of
+this same recovery — the blanket test-file exemption, and a false positive
+introduced by the run-joining fix. All 4 were reproduced before action.
+
+### Change
+
+- **Removed the blanket self-exemption entirely.** Round 1 skipped
+  `tests/test_public_safety_scan.py` wholesale so its deliberate
+  secret-shaped fixtures would not self-trip the scanner. That was
+  strictly worse than it looked: a *real* credential committed to that
+  path would also have been skipped, including when the trusted copy from
+  `main` grades a PR. `SELF_TEST_FIXTURE_PATH` and both skip sites are
+  gone; instead every fixture is assembled at runtime from fragments
+  (`"AKIA" + "ABCDEFGHIJKLMNOP"`), so the file contains no contiguous
+  match and is now scanned in full by the tool it tests. A regression test
+  asserts the constant no longer exists and that a credential in that path
+  is caught.
+- **Run-joining no longer crosses structural boundaries.** Round 2 joined
+  every `<w:t>` in a story part with no separator to catch text split
+  across runs; that also joined text across paragraph, table row/cell,
+  tab, and line-break boundaries, which Word does not display as
+  continuous — inventing addresses the document never shows and blocking
+  safe artifact updates. Those elements now emit a separator. Verified
+  both directions: adjacent runs inside one paragraph are still caught,
+  and paragraph/tab boundaries no longer produce a match.
+- **Bot noreply identities accepted**: the username component rejected
+  bracketed bot addresses (dependabot, github-actions), which would have
+  failed the mandatory job for every automated commit.
+
+### Deferred, with reason: incoming-range history scanning
+
+The fourth finding is real and reproduced: the scan inspects only the
+checked-out tip tree, so a secret added in one commit and deleted by the
+tip passes both jobs while remaining reachable in history after a merge
+that preserves commits. It is **not fixed here**, because implementing it
+would immediately fail this PR against its own history: 4 earlier blobs of
+`tests/test_public_safety_scan.py` in this branch's range still contain
+the pre-fix contiguous fixture literals (verified by walking
+`merge-base..HEAD`). Passing would require rewriting PR #17's history,
+which the governing instruction for this recovery explicitly forbids.
+Deferring is clean rather than merely convenient: once this PR merges,
+those blobs are ancestors of `main`, so a later PR adding range scanning
+starts from a base that already contains them and never re-scans them.
+The compensating control already shipped in this same PR — the weekly
+full-history gitleaks scan in `secret-scan.yml` — covers reachable
+history, and the blobs in question hold synthetic test constants, not
+real credentials.
+
+### Verification
+
+All 4 findings reproduced before action; the 3 fixed ones confirmed fixed,
+including two explicit no-regression checks on the run-joining change.
+Removing the exemption immediately surfaced a real self-scan hit (the
+constant name `_GENERIC_SECRET` plus its assignment matched the generic
+pattern), which was fixed by renaming rather than by re-adding any
+exemption. `python -m unittest discover -s tests` — 159 tests,
+`OK (skipped=4)`. `tools/public_safety_scan.py` passes clean against the
+real tree with no path exempted.
+
+## 2026-09-02 — public-safety hardening round 5 (fourth exact-head review, PR #17)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+Fourth independent Codex review, against exact head `4d63cff`, returned 3
+findings (the per-round count is converging: 5 → 6 → 4 → 3). All three
+reproduced before fixing.
+
+### Change
+
+- **UTF-16 text files were silently skipped**: `read_text(encoding="utf-8")`
+  raised `UnicodeDecodeError` on the common Windows encoding and the
+  handler returned without scanning. Reproduced with a UTF-16 `.env`
+  holding both an API-key assignment and a non-allowlisted address — the
+  scan reported nothing. Now reads bytes and decodes UTF-8/UTF-16, BOM
+  first.
+- **DOCX extended/custom properties were never inspected**: identity and
+  private-path metadata lives in `docProps/app.xml` (`Manager`, `Company`,
+  `Template`) and `docProps/custom.xml`, and artifact DOCX files bypass the
+  plain text scanner, so those parts went unread entirely. Both parts are
+  now scanned, with the three named identity fields checked against
+  `ALLOWED_METADATA_VALUES`.
+- **Relationship targets are now parsed, not string-matched**: round 3
+  scanned `.rels` as serialized XML, so an entity-encoded address
+  (`mailto:alice&#64;…`) carried no literal `@` and evaded `EMAIL_PATTERN`
+  even though Word resolves it. `Target` attribute values are now scanned
+  as parsed (entity-decoded) values.
+
+Adding the `Template` check immediately produced 13 false positives across
+the real artifact library, where the value is Word's default global
+template (`Normal` / `Normal.dotm`). Those two names were added to
+`ALLOWED_METADATA_VALUES` after confirming they name no person and reveal
+no path; a `Template` that *is* a private path (`…/Users/<name>/…`) is
+still flagged, and a regression test pins both behaviours.
+
+### Verification
+
+All 3 findings reproduced failing before the fix and passing after.
+`python -m unittest discover -s tests` — 163 tests, `OK (skipped=4)`.
+`tools/public_safety_scan.py` passes clean against the real tree.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but
