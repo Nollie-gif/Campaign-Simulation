@@ -86,6 +86,44 @@ tree. Each of the 5 fixed findings was reproduced failing against the
 pre-fix code and confirmed passing after, both via an ad hoc throwaway
 fixture repo and via the corresponding committed regression test.
 
+## 2026-09-02 — public-safety self-scan false positive (real CI, PR #17)
+
+**Category:** CI correctness fix (public-safety scanner)
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+After pushing the Gate 10 recovery commit (`6f428e2`) and letting real GitHub
+Actions CI run on PR #17 (not a local simulation), the `public-safety` job
+failed on both `push` and `pull_request` triggers. This was independent of
+the Finding #3 (synthetic merge-ref committer) investigation recorded above,
+which was correctly *not* reproducible — this was a separate, new defect
+introduced by this recovery's own Finding-1 fix.
+
+### Change
+
+Removing the old text-suffix allowlist (per the Finding-1 fix above) means
+`tools/public_safety_scan.py` now scans every tracked non-artifact-binary
+file, including its own new regression suite,
+`tests/test_public_safety_scan.py`, which deliberately embeds
+secret-shaped strings (`AKIA...`, `github_pat_...`) and non-noreply sample
+emails as fixtures to prove detection works. The scanner correctly
+mechanically flagged its own test fixtures as if they were leaked
+material. Fixed by adding `SELF_TEST_FIXTURE_PATH` and skipping that exact
+path in both `main()`'s dispatch loop and the test suite's own `_run_scan()`
+harness, with a comment documenting why (not real secrets, not general
+suppression).
+
+### Verification
+
+Reproduced directly from real CI logs on PR #17 (run `33654734706`, job
+`public-safety`, head `6f428e2`, checked out at synthetic merge ref
+`83a8655`): `tools/public_safety_scan.py` exited 1, flagging
+`tests/test_public_safety_scan.py` for an AWS-key-shaped string, a
+GitHub-token-shaped string, and 4 sample emails. After the fix,
+`python tools/public_safety_scan.py` passes clean locally and
+`python -m unittest discover -s tests` still reports `OK (skipped=4)`.
+
 ## 2026-08-21 — Change-ledger checker hardening (PR #21 pre-merge review)
 
 **Why:** PR #21 (Flight Control Extraction, entry below) was CI-green but

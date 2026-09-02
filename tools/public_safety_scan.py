@@ -57,6 +57,11 @@ WORD_STORY_PART_PATTERN = re.compile(r"^word/(document|header\d*|footer\d*|footn
 # "Notes", "Quartz PDFContext") and are not personal-identity metadata.
 PDF_METADATA_PATTERN = re.compile(rb"/Author\s*\((.*?)(?<!\\)\)", re.DOTALL)
 
+# This scanner's own regression suite deliberately embeds secret-shaped
+# strings and non-noreply sample emails as fixtures to prove detection
+# works; it is not leaked material and must not be flagged.
+SELF_TEST_FIXTURE_PATH = "tests/test_public_safety_scan.py"
+
 
 def tracked_files() -> list[Path]:
     output = subprocess.run(
@@ -186,6 +191,9 @@ def main() -> int:
 
     for path in tracked_files():
         if not path.is_file():
+            continue
+        relative = path.relative_to(ROOT).as_posix()
+        if relative == SELF_TEST_FIXTURE_PATH:
             continue
         is_artifact = ARTIFACT_DIRECTORY in path.parents
         suffix = path.suffix.lower()

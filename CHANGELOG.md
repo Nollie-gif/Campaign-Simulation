@@ -13,6 +13,11 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** Fixed a public-safety scanner self-scan false positive
+  caught by real CI on PR #17 after the fix below was pushed: removing the
+  old suffix allowlist meant the scanner started flagging its own
+  regression test's deliberate secret-shaped/email-shaped fixtures. See
+  `ENGINE_CHANGELOG.md`.
 - **(engineering)** PR #17's `tools/public_safety_scan.py` was brought
   forward onto current `main` (merge, not rebase — the branch's 3 existing
   commits and their review threads were preserved) and its 5 confirmed

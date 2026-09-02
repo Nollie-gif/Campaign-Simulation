@@ -36,6 +36,9 @@ def _run_scan(repo_root: Path, module) -> list[str]:
     for path in module.tracked_files():
         if not path.is_file():
             continue
+        relative = path.relative_to(repo_root).as_posix()
+        if relative == module.SELF_TEST_FIXTURE_PATH:
+            continue
         is_artifact = module.ARTIFACT_DIRECTORY in path.parents
         suffix = path.suffix.lower()
         if suffix == ".docx" and is_artifact:
