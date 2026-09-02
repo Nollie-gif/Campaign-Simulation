@@ -13,6 +13,15 @@ CHANGELOG."
 
 ## 2026-09-02
 
+- **(engineering)** A Gate 10 reassessment reopened four specific gaps with
+  an explicit bound: a secret introduced by one commit and deleted by a
+  later commit in the same push/PR now stays caught (it previously only
+  showed up in the weekly full-history scan); bare OpenAI API keys are now
+  their own detected credential class, not just ones with an `api_key=`
+  prefix; a DOCX with an embedded object payload is now rejected instead of
+  silently passing unchecked; and PDF XMP author metadata is now read
+  correctly regardless of which XML prefix or attribute form the producing
+  tool used. See `ENGINE_CHANGELOG.md`.
 - **(engineering)** A fourth exact-head-bound review found 3 more gaps:
   UTF-16 text files (common from Windows tooling) were silently skipped
   entirely; DOCX extended/custom properties (Manager, Company, Template,

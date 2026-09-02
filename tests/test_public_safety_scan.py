@@ -420,6 +420,169 @@ class PublicSafetyScanRegressionTests(unittest.TestCase):
         failures = _run_scan(self.repo_root, self.module)
         self.assertTrue(any(_addr("alice") in f for f in failures), failures)
 
+    def test_finding22_openai_bare_key_is_caught_without_keyword(self) -> None:
+        # No "api_key="/"secret=" keyword precedes it at all — e.g. pasted
+        # into a curl command's Authorization header — so only a dedicated
+        # bare-prefix pattern (not the keyword-gated generic one) can catch it.
+        (self.repo_root / "notes.txt").write_text(
+            f'curl -H "Authorization: Bearer {_OPENAI_KEY}" https://api.openai.com/v1/models\n'
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("OpenAI API key" in f for f in failures), failures)
+
+    def test_finding22b_openai_legacy_bare_key_is_caught(self) -> None:
+        legacy_key = "sk-" + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS"
+        (self.repo_root / "notes2.txt").write_text(f"key was {legacy_key} in the log\n")
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("OpenAI API key" in f for f in failures), failures)
+
+    def test_finding23_docx_embedded_object_is_rejected(self) -> None:
+        _make_docx(
+            self.repo_root / "artifacts" / "embedded.docx",
+            extra_parts={"word/embeddings/oleObject1.bin": "not-really-ole-but-irrelevant"},
+        )
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(
+            any("embedded package/object payload" in f and "word/embeddings/oleObject1.bin" in f
+                for f in failures),
+            failures,
+        )
+
+    def test_finding24_pdf_xmp_creator_with_nonstandard_prefix_is_caught(self) -> None:
+        # The dc: namespace URI is bound to prefix "ns1" here, not "dc" — a
+        # literal-tag "<dc:creator>" regex would miss this entirely even
+        # though it is standard, valid XMP.
+        pdf_bytes = (
+            b"%PDF-1.4\n1 0 obj\n<< /Type /Metadata /Subtype /XML >>\nstream\n"
+            b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+            b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            b'<rdf:Description xmlns:ns1="http://purl.org/dc/elements/1.1/">'
+            b"<ns1:creator><rdf:Alt><rdf:li xml:lang=\"x-default\">Alice Person</rdf:li>"
+            b"</rdf:Alt></ns1:creator></rdf:Description></rdf:RDF></x:xmpmeta>\nendstream\nendobj\n%%EOF"
+        )
+        (self.repo_root / "artifacts" / "prefix_xmp.pdf").write_bytes(pdf_bytes)
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("Alice Person" in f and "XMP" in f for f in failures), failures)
+
+    def test_finding25_pdf_xmp_creator_attribute_form_is_caught(self) -> None:
+        # XMP's shorthand/"compact" serialization: dc:creator as a plain
+        # attribute on rdf:Description, not a child element at all.
+        pdf_bytes = (
+            b"%PDF-1.4\n1 0 obj\n<< /Type /Metadata /Subtype /XML >>\nstream\n"
+            b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+            b'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            b'<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" '
+            b'dc:creator="Alice Person"/>'
+            b"</rdf:RDF></x:xmpmeta>\nendstream\nendobj\n%%EOF"
+        )
+        (self.repo_root / "artifacts" / "attr_xmp.pdf").write_bytes(pdf_bytes)
+        self._commit()
+        failures = _run_scan(self.repo_root, self.module)
+        self.assertTrue(any("Alice Person" in f and "XMP" in f for f in failures), failures)
+
+    def test_finding26_secret_introduced_then_deleted_is_still_caught(self) -> None:
+        # Reproduces the obligation directly: a secret lands in one commit
+        # and a later commit removes it, so the tip tree is clean and every
+        # tip-tree-only check (all the ones above) sees nothing — but the
+        # blob stays reachable in history forever once this branch merges.
+        subprocess.run(["git", "checkout", "-qb", "main"], cwd=self.repo_root, check=True)
+        (self.repo_root / "base.txt").write_text("base\n")
+        self._commit()
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.repo_root, check=True)
+
+        (self.repo_root / "leak.txt").write_text(f"AWS_KEY={_AWS_KEY}\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "oops, added a key"], cwd=self.repo_root, check=True)
+
+        (self.repo_root / "leak.txt").write_text("nothing to see here\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "remove the key"], cwd=self.repo_root, check=True)
+
+        subprocess.run(["git", "remote", "add", "origin", str(self.repo_root)], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=self.repo_root, check=True)
+
+        self.module.ROOT = self.repo_root
+        # The tip-tree scan alone finds nothing — confirms this is a real
+        # history-only gap, not just a duplicate of an already-caught case.
+        tip_failures = _run_scan(self.repo_root, self.module)
+        self.assertFalse(any("AWS access key" in f for f in tip_failures), tip_failures)
+
+        history_failures: list[str] = []
+        self.module.check_incoming_commit_secrets(history_failures)
+        self.assertTrue(any("AWS access key" in f for f in history_failures), history_failures)
+
+    def test_finding26b_range_override_does_not_rescan_already_graded_commits(self) -> None:
+        # A previous CI run on this same PR branch already graded the
+        # commit that introduced the secret; PUBLIC_SAFETY_COMMIT_RANGE_BASE
+        # scopes this run to only the commit(s) pushed since then, matching
+        # real `push`/`pull_request(synchronize)` semantics — so the old,
+        # already-checked commit is not re-flagged on every subsequent push.
+        subprocess.run(["git", "checkout", "-qb", "main"], cwd=self.repo_root, check=True)
+        (self.repo_root / "base.txt").write_text("base\n")
+        self._commit()
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.repo_root, check=True)
+
+        (self.repo_root / "leak.txt").write_text(f"AWS_KEY={_AWS_KEY}\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "oops, added a key"], cwd=self.repo_root, check=True)
+        previously_graded_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        (self.repo_root / "unrelated.txt").write_text("just a normal follow-up change\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "unrelated follow-up"], cwd=self.repo_root, check=True)
+
+        subprocess.run(["git", "remote", "add", "origin", str(self.repo_root)], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=self.repo_root, check=True)
+
+        self.module.ROOT = self.repo_root
+        with mock.patch.dict("os.environ", {"PUBLIC_SAFETY_COMMIT_RANGE_BASE": previously_graded_sha}):
+            failures: list[str] = []
+            self.module.check_incoming_commit_secrets(failures)
+        self.assertEqual(failures, [], failures)
+
+    def test_finding26c_merge_commits_are_skipped_not_rescanned(self) -> None:
+        # A merge commit's naive diff-vs-first-parent shows whatever the
+        # *other* parent side contributed — for a merge of origin/main in,
+        # that is all of main's own history at that point, not new content
+        # authored on this branch. Without skipping merge commits, that
+        # would false-positive on already-trusted main content and re-scan
+        # already-merged history on every single run.
+        subprocess.run(["git", "checkout", "-qb", "main"], cwd=self.repo_root, check=True)
+        (self.repo_root / "base.txt").write_text("base\n")
+        self._commit()
+        (self.repo_root / "already_on_main.txt").write_text(f"AWS_KEY={_AWS_KEY}\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "pre-existing content on main"], cwd=self.repo_root, check=True)
+        main_tip = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        subprocess.run(["git", "checkout", "-qb", "feature", "HEAD~1"], cwd=self.repo_root, check=True)
+        (self.repo_root / "feature.txt").write_text("feature work\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "feature commit"], cwd=self.repo_root, check=True)
+
+        subprocess.run(["git", "remote", "add", "origin", str(self.repo_root)], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=self.repo_root, check=True)
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", main_tip], cwd=self.repo_root, check=True)
+
+        subprocess.run(
+            ["git", "-c", "user.email=noreply@github.com", "-c", "user.name=Test",
+             "merge", "-q", "-m", "merge main", "origin/main"],
+            cwd=self.repo_root, check=True,
+        )
+
+        self.module.ROOT = self.repo_root
+        failures: list[str] = []
+        self.module.check_incoming_commit_secrets(failures)
+        self.assertEqual(failures, [], failures)
+
     def test_commit_identities_accept_github_noreply_committer(self) -> None:
         # Empirically confirmed against PR #17's real refs/pull/17/merge:
         # GitHub's synthetic merge commit uses committer "GitHub

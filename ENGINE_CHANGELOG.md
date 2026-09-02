@@ -12,6 +12,121 @@ anything before that date.
 
 ---
 
+## 2026-09-02 — public-safety hardening round 6 (Gate 10 reassessment: bounded final contract)
+
+**Category:** CI hardening / public-safety scanner correctness
+**Compatibility:** Additive/corrective only; no runtime/API behavior changed.
+
+### Why
+
+Per a fresh Gate 10 reassessment, four specific obligations were reopened
+with an explicit bound (fix only these four; provider catalogues, exotic
+encodings, compressed-content-stream forensics, and general malware/
+forensic scanning remain explicitly out of scope):
+
+1. A secret introduced by any incoming commit must not become reachable
+   from `main` even if a later commit in the same range deletes it — the
+   history-range gap deferred (with reasoning) in round 4.
+2. Bare OpenAI API keys must be an explicit, high-likelihood credential
+   class — not only caught incidentally via the keyword-gated generic
+   assignment pattern.
+3. A DOCX containing an embedded package/object payload (`word/embeddings/
+   *`) must be rejected outright, not recursively inspected.
+4. Standard PDF XMP `dc:creator` must be read independent of which XML
+   prefix is bound to the `dc:` namespace, and independent of the
+   attribute-form ("compact"/shorthand) XMP serialization.
+
+Each was reproduced against the pre-fix code before being treated as
+confirmed, per the discipline established in every prior round of this
+recovery.
+
+### Change
+
+- **Incoming-commit secret scan** (`check_incoming_commit_secrets()`): walks
+  every non-merge commit in the same range `check_commit_identities()`
+  already uses (`_commit_range_base()`, extracted as shared logic — the
+  `PUBLIC_SAFETY_COMMIT_RANGE_BASE` push-event override or a merge-base
+  fallback against `origin/main`) and scans each commit's own added lines
+  (`git diff --unified=0 parent commit`) against `SECRET_PATTERNS`,
+  independent of whether a later commit in the range deletes the match.
+  Merge commits are deliberately skipped: diffing a merge against its first
+  parent surfaces whatever the *other* parent side contributed (verified
+  directly against this repository's own two merge commits — 4002 and 71
+  insertions respectively, none of it authored on this branch), which would
+  otherwise re-flag already-trusted `origin/main` content pulled in by the
+  merge as if this branch had just introduced it.
+  - **`.github/workflows/tests.yml`**: `PUBLIC_SAFETY_COMMIT_RANGE_BASE` now
+    reads `github.event.before` unconditionally (populated for every
+    `push`, and for a `pull_request` only on `synchronize`) instead of only
+    on `push`. This matters specifically for this new check: without it, a
+    `pull_request` run always falls back to the full merge-base range and
+    would re-scan a long-lived PR's entire prior history on every push.
+  - **Known, expected, non-blocking gap this round leaves visible:** this
+    branch's own history (predating round 4's fragmented-fixture fix)
+    contains two commits (`6f428e2`, `b9c77b3`) with literal contiguous
+    secret-shaped strings in `tests/test_public_safety_scan.py`'s pre-fix
+    fixtures. Running `python tools/public_safety_scan.py` locally (no
+    `PUBLIC_SAFETY_COMMIT_RANGE_BASE`, merge-base fallback against
+    `origin/main`) correctly and expectedly reports 7 findings from those
+    two commits — this is the new check doing exactly its job, not a
+    regression, and Flight Control's `run_required_checks()` does not
+    invoke `public_safety_scan.py`, so it does not block the local commit.
+    It will not appear in real CI going forward: the very next push to this
+    branch is a `synchronize` event whose `before` is the branch's current
+    tip, so both the `push` and `pull_request` `public-safety` jobs will
+    scan only the newly added commit(s), never re-walking this pre-existing
+    range. Rewriting this branch's history to remove those blobs was
+    considered and rejected — it would invalidate every prior review
+    thread's anchor SHA across five rounds of independent Codex review, for
+    a gap already fully covered going forward and by the weekly
+    full-history gitleaks scan (`secret-scan.yml`) in the interim.
+- **Bare OpenAI API key** (`SECRET_PATTERNS`): new dedicated entry,
+  `sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9]{20,}` — covers
+  both the modern segmented prefix and the legacy 48-character form, with no
+  requirement for a preceding `api_key=`/`secret=` keyword (a key pasted
+  into a curl `Authorization` header or a plain-text note carries none).
+  Deliberately scoped to OpenAI only, per the explicit instruction not to
+  broaden this into a general provider catalogue.
+- **DOCX embedded package/object rejection** (`scan_docx_metadata()`): any
+  part under `word/embeddings/` (OOXML's fixed location for OLE/package
+  objects inserted via Insert Object — another workbook, document, or
+  arbitrary binary) now fails the scan outright, alongside the existing
+  `word/media/` check. This scanner cannot safely unpack an OLE compound
+  file or a nested Office document to check what it might contain, so the
+  artifact is rejected rather than silently passed with an uninspected
+  payload.
+- **PDF XMP `dc:creator`, namespace/attribute-agnostic** (`scan_pdf_metadata()`):
+  the literal-tag `<dc:creator>...</dc:creator>` regex is now only a
+  fallback for a block that fails to parse as XML. The primary path locates
+  the self-contained XMP block (`<...xmpmeta>...` first, `<...RDF>...` as a
+  second fallback) and parses it with `ElementTree`, matching `dc:creator`
+  by namespace URI regardless of which prefix the document happens to bind
+  to it, and checking both the element form (with `rdf:Alt`/`Seq`/`Bag` of
+  `rdf:li`) and the XMP "compact"/shorthand form (`dc:creator` as a plain
+  attribute of `rdf:Description`) — the same class of gap round 1 fixed for
+  `docProps/core.xml` by moving from regex to `ElementTree`.
+- Added 8 new regression tests (findings 22–26c) to
+  `tests/test_public_safety_scan.py`, two per obligation for the
+  bare-OpenAI-key and history-range cases (legacy vs. modern key form;
+  introduce-then-delete, range-override incrementality, and merge-commit
+  skip, respectively), one each for the DOCX-embedding rejection and the
+  two XMP gaps (nonstandard prefix, attribute form).
+
+### Verification
+
+Each of the 4 obligations was reproduced failing by running the new fixture
+tests against the pre-fix module (`git show bbd1f68:tools/public_safety_scan.py`
+loaded in place of the working copy) before being confirmed fixed against
+the current code — 5 direct fixture failures plus one `AttributeError` for
+`check_incoming_commit_secrets` not existing yet. `python -m unittest
+discover -s tests` — 171 tests, `OK (skipped=4)` (163 prior + 8 new).
+`python tools/public_safety_scan.py` run against the real tree surfaces
+exactly the known, documented, already-explained gap above (7 findings from
+2 pre-round-4 commits) and nothing else — no new false positives from any
+of the four changes against the real artifact library or codebase.
+
+---
+
 ## 2026-09-02 — PR #17 recovery: forward-port + confirmed-defect fixes (Gate 10)
 
 **Category:** CI hardening / public-safety scanner correctness

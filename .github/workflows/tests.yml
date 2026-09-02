@@ -46,7 +46,16 @@ jobs:
           fi
       - name: Run public-safety scan
         env:
-          PUBLIC_SAFETY_COMMIT_RANGE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          # `before` is populated on every `push` event, and on a
+          # `pull_request` event only for the `synchronize` action (a new
+          # push to an already-open PR) — not `opened`/`reopened`, which
+          # correctly falls back to the script's own merge-base scan since
+          # nothing has been checked yet for those. Scoping to the real
+          # incremental push range (rather than always re-walking the
+          # entire PR history back to origin/main) matters most for the
+          # incoming-commit secret scan: without it, every push to a
+          # long-lived PR would re-scan commits this job already graded.
+          PUBLIC_SAFETY_COMMIT_RANGE_BASE: ${{ github.event.before || '' }}
         run: python tools/public_safety_scan.py
 
   change-ledger:
