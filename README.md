@@ -8,6 +8,18 @@ The Main Campaign is the authoritative canon anchor. Simulation branches may rea
 
 This repository contains no live private campaign state, names, locations, characters, or populated gameplay examples in its framework layer.
 
+## Project status
+
+Campaign-Simulation is public and usable as a reusable framework, but it is still evolving. Stable framework behavior is promoted only after it survives real use and review; experimental ideas do not become authority merely because they exist on an old branch or pull request.
+
+Current framework truth lives on `main`, in the repository documentation, code, schemas, and tests.
+
+## Why this is public
+
+This project grew out of practical lessons from building and playing a much more specific private campaign system. We want those lessons to be useful beyond one table.
+
+So the campaign-neutral parts are shared openly for others to study, reuse, question, adapt, and improve. The private campaign itself stays private; the reusable knowledge does not have to.
+
 ## Reference implementation boundary
 
 The framework was developed alongside a private live reference implementation, **Mission 10**, where many of these contracts were first stressed by real gameplay.
