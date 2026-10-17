@@ -1,6 +1,6 @@
 # Public Reference Parity Audit
 
-Status: initial audit for LinkedIn/public-readiness work.
+Status: completed public-reference audit. Campaign-Simulation is now public; this document records the parity boundary and remaining framework-review candidates.
 
 ## Why this exists
 
@@ -75,11 +75,11 @@ Mission 10 exposed the false-success failure mode where a file changed but the a
 
 Framework status: publication receipts already generalize most of this. Review docs/HUMAN_README wording so humans understand that persistence success means authoritative publication, not merely "a file changed".
 
-## Existing experimental work: do not promote merely for public parity
+## Experimental work: do not promote merely for public parity
 
-Campaign Clock, Autosave and Deferred Event Scheduler remain in draft PR work and require their own gameplay evidence before merge. Public-readiness is not permission to promote experimental mechanics.
+Campaign Clock, Autosave and Deferred Event Scheduler remain evidence-gated concepts. Earlier experimental PR implementations were closed without merge and are not framework authority. Any future implementation must return through fresh Mission10 gameplay evidence and a new, bounded framework review.
 
-Likewise, documentation-coverage hardening remains an independent open PR and should be resolved on its own evidence.
+The earlier documentation-coverage PR was also closed without merge. Documentation workflow changes should be reconsidered from current repository truth rather than inherited from that discarded implementation.
 
 ## Public-reference rule
 
@@ -93,10 +93,13 @@ In public wording:
 
 We are not hiding the distinction. We just love the monster, therefore strangers do not get the keys to its basement.
 
-## Next actions
+## Current status and next review work
 
-1. Resolve the generic-candidate review above without copying campaign-specific state.
-2. Add the historical artifact library and provenance rules.
-3. Update public-facing README/HUMAN_README to explain the private-reference/public-framework relationship.
-4. Run a public-readiness audit: secrets/private data, local paths, metadata, links, docs and repository history.
-5. Only then change Campaign-Simulation visibility to public and use it as the LinkedIn destination.
+The repository is public, the historical artifact library and rights boundary are present, and README/HUMAN_README explain the private-reference/public-framework relationship.
+
+Remaining parity work is intentionally narrow:
+
+1. Review the generic candidates above one by one against current Mission10 evidence.
+2. Promote only campaign-neutral behavior that has survived real use.
+3. Keep private adapters, live state, provider identifiers, canon and DM-only information out of this repository.
+4. Treat public-surface hygiene and security checks as maintenance, not permission to expand framework scope.
